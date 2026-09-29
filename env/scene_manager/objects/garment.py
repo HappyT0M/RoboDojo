@@ -1,6 +1,7 @@
 from isaacsim.core.api.materials.particle_material import ParticleMaterial
 from isaacsim.core.api.materials.preview_surface import PreviewSurface
 from isaacsim.core.prims import SingleClothPrim, SingleParticleSystem
+from isaacsim.core.prims.impl.particle_system import ParticleSystem
 from isaacsim.core.simulation_manager import SimulationManager
 import isaacsim.core.utils.prims as prims_utils
 from isaacsim.core.utils.prims import get_prim_at_path, is_prim_path_valid
@@ -12,6 +13,10 @@ from omegaconf import DictConfig
 import omni.kit.commands
 from pxr import Usd, UsdGeom, UsdShade, Vt
 import torch
+from utils.isaacsim_compat import ensure_particle_system_wind_compat
+
+
+ensure_particle_system_wind_compat(ParticleSystem)
 
 
 class GarmentObject(SingleClothPrim):
@@ -100,6 +105,10 @@ class GarmentObject(SingleClothPrim):
         # Initialize or reuse particle system
         if is_prim_path_valid(self.particle_system_path):
             self.particle_system = SingleParticleSystem(prim_path=self.particle_system_path)
+            # A particle system can be shared/reused across scene setup. Update
+            # its wind explicitly so each evaluation's runtime option takes
+            # effect and a preceding windy run cannot leak into a no-wind run.
+            self.particle_system.set_wind(self.inst_particle_system_cfg.get("wind", (0.0, 0.0, 0.0)))
         else:
             self.particle_system = SingleParticleSystem(
                 prim_path=self.particle_system_path,
@@ -118,7 +127,7 @@ class GarmentObject(SingleClothPrim):
                 particle_contact_offset=self.inst_particle_system_cfg.get("particle_contact_offset", 0.01),
                 fluid_rest_offset=self.inst_particle_system_cfg.get("fluid_rest_offset", 0.0075),
                 solid_rest_offset=self.inst_particle_system_cfg.get("solid_rest_offset", 0.0075),
-                wind=self.inst_particle_system_cfg.get("wind", None),
+                wind=self.inst_particle_system_cfg.get("wind", (0.0, 0.0, 0.0)),
                 max_neighborhood=self.inst_particle_system_cfg.get("max_neighborhood", None),
                 max_velocity=self.inst_particle_system_cfg.get("max_velocity", None),
             )

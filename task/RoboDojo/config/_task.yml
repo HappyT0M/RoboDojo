@@ -45,6 +45,9 @@ tasks:
   
   fold_clothes_random:
     eval_nums: 25
+
+  put_sponge_in_bowl:
+    eval_nums: 1
   
   arrange_largest_number:
     eval_nums: 25

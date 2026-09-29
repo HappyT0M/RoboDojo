@@ -27,6 +27,7 @@ host="localhost"
 protocol=""
 policy_server_url=""
 extra_args=()
+wind_args=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -51,6 +52,14 @@ while [[ $# -gt 0 ]]; do
         --policy_server_url) policy_server_url="$2" ;;
       esac
       shift 2
+      ;;
+    --wind)
+      if [[ $# -lt 4 ]]; then
+        echo "[ERROR] --wind requires three values: WX WY WZ" >&2
+        exit 1
+      fi
+      wind_args+=(--wind "$2" "$3" "$4")
+      shift 4
       ;;
     *)
       extra_args+=("$1")
@@ -118,7 +127,14 @@ num_envs="$(python3 -c "import sys,yaml;print(yaml.safe_load(open(sys.argv[1])).
 echo "[INFO] render_interval = ${render_interval}"
 echo "[INFO] num_envs        = ${num_envs}"
 
-extra_args=()
+if [[ ${#wind_args[@]} -eq 0 && -n "${ROBODOJO_WIND:-}" ]]; then
+  IFS=',' read -r -a _wind_values <<< "${ROBODOJO_WIND}"
+  if [[ ${#_wind_values[@]} -ne 3 ]]; then
+    echo "[ERROR] ROBODOJO_WIND must be three comma-separated values" >&2
+    exit 1
+  fi
+  wind_args=(--wind "${_wind_values[@]}")
+fi
 
 KIT_ENABLE_EXTS=(
   "isaacsim.replicator.behavior"
@@ -159,6 +175,7 @@ while : ; do
     --host "$host" \
     --headless \
     "${extra_args[@]}" \
+    "${wind_args[@]}" \
     "$@"
   rc=$?
   set -e

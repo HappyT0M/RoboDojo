@@ -23,7 +23,7 @@ from utils.path import deep_resolve_paths, get_mdl_paths_from_folder, get_usd_pa
 from utils.transformer import *
 from utils.transformer import _get_link_matrix_from_usd
 
-OBJECT_CONFIG_TYPES = ("Rigid", "Dynamic", "Geometry", "Articulation", "Garment", "Fluid")
+OBJECT_CONFIG_TYPES = ("Rigid", "Dynamic", "Geometry", "Articulation", "Garment", "Fluid", "Deformable")
 
 
 @dataclass
@@ -91,7 +91,7 @@ class LayoutManager:
         self.replay = True
 
     def process_config(self):
-        keys = ["Rigid", "Dynamic", "Geometry", "Articulation", "Garment", "Fluid"]
+        keys = ["Rigid", "Dynamic", "Geometry", "Articulation", "Garment", "Fluid", "Deformable"]
         with open_dict(self.scene_config), open_dict(self.task_config):
             for key in keys:
                 if key in self.scene_config:
@@ -155,18 +155,20 @@ class LayoutManager:
             return None
         self.clear_layout_state([env_idx])
         for key, value in env_config.items():
-            if key in ["Rigid", "Dynamic", "Geometry", "Articulation", "Garment", "Fluid"]:
+            if key in ["Rigid", "Dynamic", "Geometry", "Articulation", "Garment", "Fluid", "Deformable"]:
                 for cat, inst_list in value.items():
                     for inst in inst_list:
                         cat_idx = inst.get("category_idx", None)
                         prim_path, inst_name = self._generate_object_paths(env_idx, cat, cat_idx, type=key.lower())
-                        if key in ["Rigid", "Dynamic", "Garment", "Articulation", "Geometry", "Fluid"]:
+                        if key in ["Rigid", "Dynamic", "Garment", "Articulation", "Geometry", "Fluid", "Deformable"]:
                             if "type" in inst and inst["type"] == "cluttered":
                                 usd_path = f"{OBJECTS_PATH}/Clutter/{cat}/{cat_idx:05d}/object.usdz"
                             else:
                                 usd_path = f"{OBJECTS_PATH}/{key}/{cat}/{cat_idx:05d}/object.usdz"
                             if not os.path.exists(usd_path):
                                 usd_path = f"{OBJECTS_PATH}/{key}/{cat}/{cat_idx:05d}/object.usd"
+                            if not os.path.exists(usd_path):
+                                usd_path = f"{OBJECTS_PATH}/{key}/{cat}/{cat_idx:05d}/object.usda"
                         if "visual" in inst:
                             visual_cfg = inst.get("visual")
                             if isinstance(visual_cfg, DictConfig):
@@ -389,7 +391,7 @@ class LayoutManager:
         return visual_cfg
 
     def get_instance_name(self, env_idx, label):
-        types = ["Rigid", "Dynamic", "Geometry", "Articulation", "Garment", "Fluid"]
+        types = ["Rigid", "Dynamic", "Geometry", "Articulation", "Garment", "Fluid", "Deformable"]
         for t in types:
             for obj_cfg in self.object_records_by_type[t].layout_records_by_env[env_idx]:
                 if obj_cfg.get("label", None) == label:
@@ -409,7 +411,7 @@ class LayoutManager:
         return result[key]
 
     def get_labels_by_prefix(self, env_idx, prefix):
-        types = ["Rigid", "Geometry", "Articulation", "Garment", "Fluid"]
+        types = ["Rigid", "Geometry", "Articulation", "Garment", "Fluid", "Deformable"]
         label_list = []
         for t in types:
             for obj_cfg in self.object_records_by_type[t].layout_records_by_env[env_idx]:
@@ -438,6 +440,10 @@ class LayoutManager:
             pos = root_pose[:3]
             rot = root_pose[3:]
             return (pos, rot)
+        elif instance_type == "deformable":
+            state = obj.get_state(is_relative=relative)
+            root_pose = state["root_pose"].detach().cpu().numpy()
+            return (root_pose[:3], root_pose[3:])
 
     def get_label_descriptions(self, env_idx, label=None, inst_name=None):
         metadata = self.get_instance_metadata(env_idx=env_idx, label=label, inst_name=inst_name)
@@ -835,7 +841,14 @@ class LayoutManager:
             Tuple of (prim_path, inst_name)
         """
         env_root = self.env_roots[env_idx]
-        obj_id = self._get_next_object_id(env_idx, cat_name, model_idx, type)
+        if type == "deformable":
+            # Keep FEM prim paths stable across episode resets. Isaac Lab's
+            # deformable handles are created at simulation start, so these
+            # prims are reset in place instead of being destroyed/re-spawned.
+            prior_records = self.object_records_by_type["Deformable"].layout_records_by_env[env_idx]
+            obj_id = 1 + sum(record.get("category") == cat_name for record in prior_records)
+        else:
+            obj_id = self._get_next_object_id(env_idx, cat_name, model_idx, type)
         inst_name = f"{cat_name}_{model_idx}_{obj_id}"
         prim_path = f"{env_root}/{type}/{cat_name}/{inst_name}"
         return (prim_path, inst_name)

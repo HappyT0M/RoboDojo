@@ -1,0 +1,41 @@
+{
+  "task_name": "build_tower",
+  "env_id": 0,
+  "coordinate_frame": "world",
+  "views": [
+    {
+      "name": "cam_head",
+      "rgb": "cam_head/rgb.png",
+      "mask": "cam_head/instance_mask.npy",
+      "mask_type": "instance_id",
+      "K": [
+        [600.0, 0.0, 320.0],
+        [0.0, 600.0, 240.0],
+        [0.0, 0.0, 1.0]
+      ],
+      "c2w": [
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 1.0],
+        [0.0, 0.0, 0.0, 1.0]
+      ]
+    }
+  ],
+  "objects": [
+    {
+      "name": "table",
+      "category": "fixture",
+      "label": 1
+    },
+    {
+      "name": "target_block_0",
+      "category": "manipulated_object",
+      "label": 7
+    },
+    {
+      "name": "target_block_1",
+      "category": "manipulated_object",
+      "label": 8
+    }
+  ]
+}

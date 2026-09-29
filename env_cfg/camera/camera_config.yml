@@ -9,6 +9,9 @@ annotator:
     rgb_capture:
       type: rgb
       device: cpu
+    instance_capture:
+      type: instance_id_segmentation_fast
+      device: cpu
     # distance_to_image_plane_capture:
     #   type: distance_to_image_plane
     #   device: cpu
@@ -17,6 +20,9 @@ annotator:
     rgb_capture:
       type: rgb
       device: cpu
+    instance_capture:
+      type: instance_id_segmentation_fast
+      device: cpu
     # distance_to_image_plane_capture:
     #   type: distance_to_image_plane
     #   device: cpu
@@ -24,6 +30,9 @@ annotator:
     enabled: True
     rgb_capture:
       type: rgb
+      device: cpu
+    instance_capture:
+      type: instance_id_segmentation_fast
       device: cpu
     # distance_to_image_plane_capture:
     #   type: distance_to_image_plane

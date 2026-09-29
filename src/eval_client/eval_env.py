@@ -15,6 +15,7 @@ from env.global_configs import BENCHMARK
 from env.observation_manager.obs_manager import ObsManager
 from env.seed_manager.seed_manager import SeedManager
 from utils.cluttered_generator import UnStableError
+from utils.cloth_wind import apply_cloth_runtime_overrides
 from utils.pipeline_utils import get_robot_action_dim_info
 from utils.save_file import VideoStreamWriter, format_video_saved_message, save_json
 
@@ -53,6 +54,7 @@ def create_eval_env(config, app, resume_state=None, **kwargs):
         def __init__(self, config, app, resume_state=None, **kwargs):
             super().__init__(config, app, **kwargs)
             self.eval_cfg = config.eval_cfg
+            self.task_env_config = config.task_env
             self.config_name = self.eval_cfg.get("config_name", None)
             self.task_name = self.eval_cfg.get("task_name", None)
             self.eval_batch = self.eval_cfg.get("eval_batch", False)
@@ -226,8 +228,10 @@ def create_eval_env(config, app, resume_state=None, **kwargs):
 
             self.current_env_seed_map = {}
             for idx in range(self.num_envs):
+                scene_layout = self.seed_manager.get_seed_scene_info(self.env_seeds[idx])
+                apply_cloth_runtime_overrides(scene_layout, self.task_env_config)
                 self.scene_manager.layout_manager.set_saved_layout(
-                    idx, self.seed_manager.get_seed_scene_info(self.env_seeds[idx])
+                    idx, scene_layout
                 )
                 if seed[idx] is None:
                     self.success[idx] = False

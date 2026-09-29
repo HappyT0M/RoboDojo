@@ -14,6 +14,7 @@ from env.scene_manager.layout_manager import LayoutManager
 from env.scene_manager.objects.articulation import ArticulationObject
 from env.scene_manager.objects.background import Background
 from env.scene_manager.objects.dynamic import DynamicObject
+from env.scene_manager.objects.deformable import DeformableObject
 from env.scene_manager.objects.fluid import FluidObject
 from env.scene_manager.objects.garment import GarmentObject
 from env.scene_manager.objects.geometry import GeometryObject
@@ -77,6 +78,7 @@ class SceneManager:
         self._garment_objects: List[Dict[str, GarmentObject]] = [{} for _ in range(num_envs)]
         self._geometry_objects: List[Dict[str, GeometryObject]] = [{} for _ in range(num_envs)]
         self._fluid_objects: List[Dict[str, FluidObject]] = [{} for _ in range(num_envs)]
+        self._deformable_objects: List[Dict[str, DeformableObject]] = [{} for _ in range(num_envs)]
 
         # Rooms and lights remain environment-specific
         self._rooms: List[Room | None] = [None] * num_envs
@@ -96,6 +98,7 @@ class SceneManager:
             "garment",
             "geometry",
             "fluid",
+            "deformable",
         ]
 
     def update_env_seeds(self, seeds: Sequence[int] | None):
@@ -125,7 +128,7 @@ class SceneManager:
                 # Create dynamic and articulation objects for CUDA
                 self.spawn_scene_objects(
                     env_id=env_idx,
-                    exclude_types=list(set(self.spawnable_object_types) - {"rigid", "articulation"}),
+                    exclude_types=list(set(self.spawnable_object_types) - {"rigid", "articulation", "deformable"}),
                 )
             else:
                 self.spawn_scene_objects(
@@ -185,6 +188,13 @@ class SceneManager:
             obj.initialize()
         self.pending_initialization.clear()
 
+        # FEM nodes are not part of Isaac Lab's InteractiveScene update loop.
+        # Restore their authored layout state and refresh their buffers here.
+        for env_id in env_ids:
+            env_id = int(env_id)
+            for obj in self._deformable_objects[env_id].values():
+                obj.apply_saved_pose()
+
         self.sim.sim_step()
         for env_idx in range(self.num_envs):
             self.relocate_stale_objects(env_idx)
@@ -213,6 +223,7 @@ class SceneManager:
                 self._garment_objects[env_idx],
                 self._geometry_objects[env_idx],
                 self._fluid_objects[env_idx],
+                self._deformable_objects[env_idx],
             ]:
                 for obj in obj_dict.values():
                     obj.apply_saved_pose()
@@ -238,8 +249,8 @@ class SceneManager:
         if self.device.type == "cuda":
             self.relocate_stale_objects(env_id, ["rigid", "articulation"])
             # Clear existing objects (based on exclude_types)
-            self.clear_scene_objects(env_id, exclude_types=["rigid", "articulation"])
-            self.spawn_scene_objects(env_id, exclude_types=["rigid", "articulation"])
+            self.clear_scene_objects(env_id, exclude_types=["rigid", "articulation", "deformable"])
+            self.spawn_scene_objects(env_id, exclude_types=["rigid", "articulation", "deformable"])
         else:
             self.relocate_stale_objects(env_id, ["articulation"])
             # Clear existing objects (based on exclude_types)
@@ -316,6 +327,8 @@ class SceneManager:
         """
         # Get object type first to check if it should be disabled
         obj_type = inst_cfg.get("physics", {}).get("type", "rigid")
+        if obj_type == "deformable" and self.device.type != "cuda":
+            raise RuntimeError("RoboDojo FEM deformable objects require sim.device='cuda'.")
         # Check if garment is disabled due to cpu+use_fabric combination
         # Do this BEFORE creating any primitive shapes to avoid creating orphaned primitives
         if self.device.type == "cpu" and self.use_fabric:
@@ -375,6 +388,8 @@ class SceneManager:
             self._geometry_objects[env_id][obj_key] = obj
         elif isinstance(obj, FluidObject):
             self._fluid_objects[env_id][obj_key] = obj
+        elif isinstance(obj, DeformableObject):
+            self._deformable_objects[env_id][obj_key] = obj
 
     def _setup_background(self):
         """Set up background for all environments."""
@@ -580,6 +595,11 @@ class SceneManager:
                 env_origin=self.sim.scene.env_origins[env_id],
                 **{k: v for k, v in base_args.items() if k != "primitive_type"},
             )
+        elif obj_type == "deformable":
+            return DeformableObject(
+                env_origin=self.sim.scene.env_origins[env_id],
+                **{k: v for k, v in base_args.items() if k != "primitive_type"},
+            )
         else:
             raise ValueError(f"Invalid object type: {obj_type}")
 
@@ -617,6 +637,13 @@ class SceneManager:
 
         self._background = None
 
+    def update_deformable_objects(self, dt: float) -> None:
+        """Refresh FEM state buffers that are outside Isaac Lab's scene registry."""
+        for env_objects in self._deformable_objects:
+            for obj in env_objects.values():
+                if obj.asset is not None and obj.asset.is_initialized:
+                    obj.update(dt)
+
     def clear_scene_objects(self, env_id: int, exclude_types: List[str] | None = None):
         """Clear all existing objects in the specified environment.
 
@@ -633,6 +660,7 @@ class SceneManager:
             (self._garment_objects[env_id], "garment"),
             (self._geometry_objects[env_id], "geometry"),
             (self._fluid_objects[env_id], "fluid"),
+            (self._deformable_objects[env_id], "deformable"),
         ]
 
         collections_to_clear = [obj_dict for obj_dict, obj_type in all_collections if obj_type not in exclude_types]
@@ -667,7 +695,9 @@ class SceneManager:
         Args:
             obj: Object instance to delete
         """
-        if self.device.type == "cuda":
+        if isinstance(obj, DeformableObject):
+            obj.destroy()
+        elif self.device.type == "cuda":
             if isinstance(obj, GarmentObject):
                 if hasattr(obj, "usd_prim_path") and is_prim_path_valid(obj.usd_prim_path):
                     delete_prim(obj.usd_prim_path)
@@ -780,6 +810,7 @@ class SceneManager:
             "garment": self._garment_objects,
             "geometry": self._geometry_objects,
             "fluid": self._fluid_objects,
+            "deformable": self._deformable_objects,
         }
 
         if object_type is None:

@@ -1,0 +1,39 @@
+#usda 1.0
+(
+    defaultPrim = "Sponge"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Xform "Sponge" (
+    kind = "component"
+)
+{
+    def Mesh "Surface" (
+        kind = "subcomponent"
+    )
+    {
+        uniform bool doubleSided = true
+        int[] faceVertexCounts = [4, 4, 4, 4, 4, 4]
+        int[] faceVertexIndices = [
+            0, 3, 2, 1,
+            4, 5, 6, 7,
+            0, 1, 5, 4,
+            1, 2, 6, 5,
+            2, 3, 7, 6,
+            3, 0, 4, 7,
+        ]
+        uniform token orientation = "rightHanded"
+        point3f[] points = [
+            (-0.03, -0.025, -0.015),
+            ( 0.03, -0.025, -0.015),
+            ( 0.03,  0.025, -0.015),
+            (-0.03,  0.025, -0.015),
+            (-0.03, -0.025,  0.015),
+            ( 0.03, -0.025,  0.015),
+            ( 0.03,  0.025,  0.015),
+            (-0.03,  0.025,  0.015),
+        ]
+        uniform token subdivisionScheme = "none"
+    }
+}

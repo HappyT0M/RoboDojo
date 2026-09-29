@@ -36,6 +36,7 @@ resume="false"
 fail_fast="false"
 dry_run="false"
 limit=""
+wind=()
 
 usage() {
   cat <<'EOF'
@@ -59,6 +60,7 @@ Options:
   --dry-run           Print eval commands and mark tasks DRY_RUN without launching eval.
   --all               Explicitly run all runnable tasks (default when --only is omitted).
   --limit NUM         Run only the first NUM tasks after filtering.
+  --wind WX WY WZ     Constant cloth wind velocity in m/s for eval/client tasks.
   --summary PATH      JSON summary path (default: smoke_results/<run_id>.json)
   --markdown PATH     Markdown summary path (default: smoke_results/<run_id>.md)
   --run-id ID         Stable run id used in result paths and summaries.
@@ -119,6 +121,9 @@ while [[ $# -gt 0 ]]; do
     --fail-fast) fail_fast="true"; shift ;;
     --dry-run) dry_run="true"; shift ;;
     --limit) need_value "$@"; limit="$2"; shift 2 ;;
+    --wind)
+      if [[ $# -lt 4 ]]; then echo "[smoke_all_tasks] --wind requires WX WY WZ" >&2; exit 2; fi
+      wind=("$2" "$3" "$4"); shift 4 ;;
     --summary) need_value "$@"; summary_path="$2"; shift 2 ;;
     --markdown) need_value "$@"; markdown_path="$2"; shift 2 ;;
     --run-id) need_value "$@"; run_id="$2"; shift 2 ;;
@@ -159,6 +164,10 @@ dimensions="$(python3 "${ROOT_DIR}/scripts/internal/task_inventory.py" "${dimens
 
 if [[ "${execution_mode}" != "eval" && "${execution_mode}" != "client" && "${execution_mode}" != "server" ]]; then
   echo "[smoke_all_tasks] --mode must be eval, client, or server" >&2
+  exit 2
+fi
+if [[ "${execution_mode}" == "server" && ${#wind[@]} -eq 3 ]]; then
+  echo "[smoke_all_tasks] --wind applies to eval/client modes, not policy-server mode" >&2
   exit 2
 fi
 
@@ -791,6 +800,7 @@ run_eval_for_task() {
       --connect-timeout "${connect_timeout}"
     )
   fi
+  if [[ ${#wind[@]} -eq 3 ]]; then eval_cmd+=(--wind "${wind[@]}"); fi
   if [[ "${eval_num}" != "native" ]]; then
     eval_cmd+=(--eval-num "${eval_num}")
   fi

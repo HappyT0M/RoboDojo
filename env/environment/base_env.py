@@ -186,6 +186,9 @@ class BaseEnv(gym.Env):
         sim backend step
         """
         self.sim.sim_step(render=render)
+        scene_manager = getattr(self, "scene_manager", None)
+        if scene_manager is not None:
+            scene_manager.update_deformable_objects(self.sim.step_dt)
 
     def setup_physics(self, sim: IsaacRLEnv):
         """

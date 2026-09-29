@@ -1,0 +1,31 @@
+{
+  "uuid": "c7a93db2-72b6-4851-a5c5-1d1679bf587e",
+  "physics": {
+    "type": "deformable",
+    "density": 250.0,
+    "youngs_modulus": 120000.0,
+    "poissons_ratio": 0.35,
+    "elasticity_damping": 0.2,
+    "dynamic_friction": 0.6
+  },
+  "visual": {
+    "color": [0.78, 0.70, 0.43, 1.0]
+  },
+  "geometry": {
+    "faces": 6,
+    "vertices": 8,
+    "aligned_bbox": {
+      "extents": [0.06, 0.05, 0.03]
+    },
+    "oriented_bbox": {
+      "vertices": [
+        [-0.03, -0.025, -0.015], [-0.03, -0.025, 0.015],
+        [-0.03, 0.025, -0.015], [-0.03, 0.025, 0.015],
+        [0.03, -0.025, -0.015], [0.03, -0.025, 0.015],
+        [0.03, 0.025, -0.015], [0.03, 0.025, 0.015]
+      ]
+    }
+  },
+  "active": {},
+  "passive": {}
+}

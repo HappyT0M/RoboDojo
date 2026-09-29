@@ -95,6 +95,7 @@ run_eval() {
   local eval_env="RoboDojo"
   local policy_dir=""
   local eval_num="${EVAL_NUM:-}"
+  local wind=()
   local dry_run="false"
 
   while [[ $# -gt 0 ]]; do
@@ -112,6 +113,9 @@ run_eval() {
       --eval-env) need_value "$@"; eval_env="$2"; shift 2 ;;
       --policy-dir) need_value "$@"; policy_dir="$(abs_path "$2")"; shift 2 ;;
       --eval-num) need_value "$@"; eval_num="$2"; shift 2 ;;
+      --wind)
+        if [[ $# -lt 4 ]]; then echo "[robodojo eval] --wind requires WX WY WZ" >&2; exit 2; fi
+        wind=("$2" "$3" "$4"); shift 4 ;;
       --dry-run) dry_run="true"; shift ;;
       -h|--help)
         cat <<'EOF'
@@ -131,6 +135,7 @@ Common options:
   --seed NUM            Eval seed / layout seed (default: 0)
   --policy-gpu ID       Policy server GPU (default: 0)
   --env-gpu ID          Isaac Sim GPU (default: 0)
+  --wind WX WY WZ       Constant cloth wind velocity in m/s; omit for no wind
   --eval-env ENV        Simulator conda env (default: RoboDojo)
   --dry-run             Print command without running it
 
@@ -195,6 +200,7 @@ EOF
     printf '[robodojo eval] dry-run: bash %q' "${ROOT_DIR}/scripts/internal/run_policy_eval.sh"
     printf ' %q' "${policy_dir}"
     printf ' %q' "${eval_args[@]}"
+    if [[ ${#wind[@]} -eq 3 ]]; then printf ' [cloth wind: %q %q %q m/s]' "${wind[@]}"; fi
     printf '\n'
     return 0
   fi
@@ -202,7 +208,12 @@ EOF
   local start_sec end_sec elapsed_sec
   start_sec="$(date +%s)"
   (
-    bash "${ROOT_DIR}/scripts/internal/run_policy_eval.sh" "${policy_dir}" "${eval_args[@]}"
+    if [[ ${#wind[@]} -eq 3 ]]; then
+      ROBODOJO_WIND="${wind[0]},${wind[1]},${wind[2]}" \
+        bash "${ROOT_DIR}/scripts/internal/run_policy_eval.sh" "${policy_dir}" "${eval_args[@]}"
+    else
+      bash "${ROOT_DIR}/scripts/internal/run_policy_eval.sh" "${policy_dir}" "${eval_args[@]}"
+    fi
   )
   end_sec="$(date +%s)"
   elapsed_sec=$((end_sec - start_sec))
@@ -346,6 +357,7 @@ run_client() {
   local dimensions=""
   local limit=""
   local dry_run="false"
+  local wind=()
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -363,6 +375,9 @@ run_client() {
       --ckpt) need_value "$@"; ckpt="$2"; shift 2 ;;
       --action-type) need_value "$@"; action_type="$2"; shift 2 ;;
       --eval-num) need_value "$@"; eval_num="$2"; shift 2 ;;
+      --wind)
+        if [[ $# -lt 4 ]]; then echo "[robodojo client] --wind requires WX WY WZ" >&2; exit 2; fi
+        wind=("$2" "$3" "$4"); shift 4 ;;
       --connect-timeout) need_value "$@"; connect_timeout="$2"; shift 2 ;;
       --only) need_value "$@"; only_tasks="$2"; shift 2 ;;
       --tasks-file) need_value "$@"; tasks_file="$2"; shift 2 ;;
@@ -402,6 +417,7 @@ Common options:
   --env-cfg NAME         env_cfg stem (default: arx_x5)
   --seed NUM             Eval seed / layout seed (default: 0)
   --env-gpu ID           Isaac Sim GPU (default: 0)
+  --wind WX WY WZ        Constant cloth wind velocity in m/s; omit for no wind
   --gpu-ids IDS          Batch mode only: comma-separated client GPU ids
   --env-gpu-ids IDS      Batch mode only: comma-separated client GPU ids
   --ckpt NAME            Checkpoint label recorded in result paths (default: external)
@@ -488,6 +504,7 @@ EOF
     if [[ -n "${eval_num}" ]]; then
       batch_args+=(--eval-num "${eval_num}")
     fi
+    if [[ ${#wind[@]} -eq 3 ]]; then batch_args+=(--wind "${wind[@]}"); fi
     if [[ "${dry_run}" == "true" ]]; then
       batch_args+=(--dry-run)
     fi
@@ -523,6 +540,7 @@ EOF
     --additional_info "${additional_info}"
     --seed "${seed}"
   )
+  if [[ ${#wind[@]} -eq 3 ]]; then client_args+=(--wind "${wind[@]}"); fi
 
   echo "[robodojo client] task=${task} policy=${policy_name} server=${policy_host}:${policy_port} eval_num=${EVAL_NUM:-default}"
 

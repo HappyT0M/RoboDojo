@@ -59,6 +59,14 @@ parser.add_argument(
 
 
 parser.add_argument("--seed", type=int, required=True, help="policy seed for eval")
+parser.add_argument(
+    "--wind",
+    type=float,
+    nargs=3,
+    default=None,
+    metavar=("WX", "WY", "WZ"),
+    help="constant wind vector for cloth particle systems; omitted means no wind",
+)
 
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
@@ -136,6 +144,7 @@ from src.eval_client.eval_env import create_eval_env
 from utils.cluttered_generator import UnStableError
 from utils.load_file import load_yaml
 from utils.pipeline_utils import *
+from utils.cloth_wind import apply_constant_cloth_wind
 
 BENCHMARK_PATH = os.path.join(ROOT_DIR, "task", BENCHMARK)
 
@@ -308,6 +317,8 @@ def main():
             "deploy_cfg": deploy_cfg,
         }
     )
+    wind = apply_constant_cloth_wind(env_cfg.task_env, args_cli.wind)
+    print(f"[main] cloth wind={wind} (m/s)")
     capped_num_envs = resolve_random_task_num_envs(task_name, num_envs, env_cfg.sim)
     if capped_num_envs != num_envs:
         print(
