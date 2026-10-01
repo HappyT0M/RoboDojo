@@ -2,13 +2,12 @@
 
 Run from the RoboDojo root in the Isaac Sim environment::
 
-    python scripts/test_fem_sponge.py --device cuda:0 --steps 30
+    python scripts/test_fem_sponge.py --device_id 0 --steps 30
 """
 
 from __future__ import annotations
 
 import argparse
-import os
 from pathlib import Path
 import sys
 
@@ -16,12 +15,17 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-parser = argparse.ArgumentParser(description="Smoke-test RoboDojo's Isaac Lab FEM sponge asset.")
+parser = argparse.ArgumentParser(description="Smoke-test RoboDojo's Isaac Lab FEM sponge mesh.")
 parser.add_argument("--steps", type=int, default=30, help="Physics steps between load and reset")
+parser.add_argument("--device_id", type=int, default=0, help="GPU index already visible to this process")
 from isaaclab.app import AppLauncher
 
 AppLauncher.add_app_launcher_args(parser)
 args = parser.parse_args()
+if args.device_id < 0:
+    parser.error("--device_id must be a non-negative integer")
+args.device = f"cuda:{args.device_id}"
+print(f"[fem-smoke] Isaac Sim device={args.device}")
 app = AppLauncher(args).app
 
 
@@ -55,7 +59,8 @@ def main() -> None:
     }
     sponge = DeformableObject(
         prim_path="/World/envs/env_0/Deformable/sponge/sponge_0_1",
-        usd_path=str(PROJECT_ROOT / "Assets/Object/RoboDojo/Deformable/sponge/00000/object.usda"),
+        # Empty path verifies that the wrapper creates geometry procedurally.
+        usd_path="",
         inst_config=sponge_config,
         env_origin=np.zeros(3, dtype=np.float32),
         default_pos=(0.0, 0.0, 0.3),

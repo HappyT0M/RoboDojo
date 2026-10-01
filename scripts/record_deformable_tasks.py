@@ -50,7 +50,7 @@ parser.add_argument(
 )
 parser.add_argument("--num_envs", type=int, default=1, help="并行环境数")
 parser.add_argument("--env_cfg_type", type=str, default="arx_x5", help="eval 配置文件名（env_cfg 目录下，不含 .yml）")
-parser.add_argument("--device_id", type=int, default=0, help="GPU 设备 id")
+parser.add_argument("--device_id", type=int, default=0, help="当前进程可见的 GPU 序号")
 parser.add_argument("--seed", type=int, default=0, help="场景随机种子")
 parser.add_argument("--steps", type=int, default=120, help="每个 episode 推进的步数（动作步数）")
 parser.add_argument(
@@ -81,6 +81,15 @@ parser.add_argument(
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
+# Do not rewrite CUDA_VISIBLE_DEVICES here. Isaac Sim/Omniverse has its own GPU
+# enumeration and warns that masking CUDA devices can break Vulkan/PhysX device
+# discovery. Select the already-visible device directly instead.
+if args_cli.device_id is not None:
+    if args_cli.device_id < 0:
+        parser.error("--device_id must be a non-negative integer")
+    args_cli.device = f"cuda:{args_cli.device_id}"
+print(f"[record] Isaac Sim device={args_cli.device}")
+
 # 在 AppLauncher 之前安全导入（env 为 namespace package，global_configs 仅依赖 os）
 from env.global_configs import BENCHMARK, ROOT_DIR  # noqa: E402
 
@@ -101,7 +110,12 @@ import src.eval_client.eval_env as eval_env_module  # noqa: E402
 from src.eval_client.eval_env import create_eval_env  # noqa: E402
 from utils.load_file import load_yaml  # noqa: E402
 from utils.xlens_snapshot import populate_manifest_objects, save_robodojo_snapshot  # noqa: E402
-from utils.pipeline_utils import process_config, process_randomization, resolve_random_task_num_envs  # noqa: E402
+from utils.pipeline_utils import (  # noqa: E402
+    configure_task_sim_device,
+    process_config,
+    process_randomization,
+    resolve_random_task_num_envs,
+)
 
 BENCHMARK_PATH = os.path.join(ROOT_DIR, "task", BENCHMARK)
 task_registry = importlib.import_module(f"task.{BENCHMARK}.task_registry")
@@ -201,6 +215,7 @@ def build_env(task_name: str):
     env_cfg = process_randomization(env_cfg)
     env_cfg, eval_num = process_config(env_cfg, task_name=task_name)
     eval_cfg["eval_num"] = eval_num
+    configure_task_sim_device(env_cfg, args_cli.device_id)
 
     OmegaConf.update(
         env_cfg,

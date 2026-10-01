@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -20,14 +19,14 @@ class DeformableObject:
     """Wrap one Isaac Lab volume-deformable object for RoboDojo.
 
     FEM assets are only supported by the GPU simulation backend in the
-    supported Isaac Lab release. The layout stores a project-owned closed
-    surface USD mesh; Isaac Lab authors its volume simulation mesh at spawn.
+    supported Isaac Lab release. Isaac Lab creates the sponge's cuboid mesh
+    and applies deformable schemas when the mesh is spawned.
     """
 
     def __init__(
         self,
         prim_path: str,
-        usd_path: str,
+        usd_path: str | None,
         inst_config: DictConfig | dict[str, Any],
         env_origin: torch.Tensor | np.ndarray,
         default_pos: tuple[float, float, float],
@@ -36,12 +35,11 @@ class DeformableObject:
     ):
         if not torch.cuda.is_available():
             raise RuntimeError("Isaac Lab FEM deformables require GPU simulation; set the RoboDojo device to CUDA.")
-        if not usd_path or not Path(usd_path).is_file():
-            raise FileNotFoundError(f"FEM deformable USD asset does not exist: {usd_path}")
-
         self.prim_path = prim_path
         self.usd_prim_path = prim_path
-        self.usd_path = str(usd_path)
+        # Kept for compatibility with SceneManager's shared wrapper signature.
+        # FEM sponge geometry is generated from the task's configured size.
+        self.usd_path = usd_path
         self.instance_name = prim_path.rstrip("/").split("/")[-1]
         self.category_name = prim_path.rstrip("/").split("/")[-2]
         self.instance_config = inst_config
@@ -61,8 +59,8 @@ class DeformableObject:
             raise ValueError("FEM initial position, orientation, and scale must have 3, 4, and 3 values")
 
         physics = self.deformable_config["physics"]
-        spawn_cfg = sim_utils.UsdFileCfg(
-            usd_path=self.usd_path,
+        spawn_cfg = sim_utils.MeshCuboidCfg(
+            size=self.deformable_config["size"],
             scale=self.scale,
             deformable_props=sim_utils.DeformableBodyPropertiesCfg(
                 deformable_enabled=True,
@@ -70,14 +68,17 @@ class DeformableObject:
                 collision_simplification=True,
                 collision_simplification_remeshing=True,
             ),
-            physics_material=sim_utils.DeformableBodyMaterialCfg(
-                density=physics["density"],
-                youngs_modulus=physics["youngs_modulus"],
-                poissons_ratio=physics["poissons_ratio"],
-                elasticity_damping=physics["elasticity_damping"],
-                dynamic_friction=physics["dynamic_friction"],
-            ),
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=self.deformable_config["color"][:3]),
+        )
+        # Some RoboDojo Isaac Lab builds omit ``physics_material`` from the
+        # spawner constructor while the spawn function still reads it. Attach
+        # it after construction to preserve FEM material settings across builds.
+        spawn_cfg.physics_material = sim_utils.DeformableBodyMaterialCfg(
+            density=physics["density"],
+            youngs_modulus=physics["youngs_modulus"],
+            poissons_ratio=physics["poissons_ratio"],
+            elasticity_damping=physics["elasticity_damping"],
+            dynamic_friction=physics["dynamic_friction"],
         )
         self.cfg = DeformableObjectCfg(
             prim_path=self.prim_path,

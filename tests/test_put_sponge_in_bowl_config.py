@@ -30,11 +30,14 @@ def test_task_is_registered_with_one_fixed_evaluation_layout():
     sponge = layout["Deformable"]["sponge"][0]
     assert sponge["physics"]["type"] == "deformable"
     assert sponge["physics"]["youngs_modulus"] > 0
-    assert (ROOT / "Assets/Object/RoboDojo/Deformable/sponge/00000/object.usda").is_file()
+    assert sponge["size"] == [0.06, 0.05, 0.03]
 
 
 def test_smoke_script_has_explicit_gpu_and_reset_checks():
     script = (ROOT / "scripts/test_fem_sponge.py").read_text(encoding="utf-8")
+    wrapper = (ROOT / "env/scene_manager/objects/deformable.py").read_text(encoding="utf-8")
     assert "AppLauncher" in script
     assert "get_nodal_positions_w" in script
     assert "reset" in script.lower()
+    assert 'usd_path=""' in script
+    assert "MeshCuboidCfg" in wrapper

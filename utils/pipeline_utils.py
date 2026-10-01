@@ -6,6 +6,26 @@ from env.global_configs import *
 from utils.load_file import *
 
 
+def configure_task_sim_device(env_cfg, device_id):
+    """Use the visible CUDA device selected by ``device_id`` for FEM tasks.
+
+    RoboDojo otherwise defaults its simulation device to CPU. The selected
+    index is relative to GPUs already visible to the process; do not mask
+    devices with ``CUDA_VISIBLE_DEVICES`` because Omniverse enumerates GPUs
+    independently for Vulkan and PhysX.
+    """
+    task_config = env_cfg.get("task_env", {})
+    if not task_config.get("Deformable"):
+        return env_cfg
+
+    if not isinstance(device_id, int) or device_id < 0:
+        raise ValueError("FEM deformable tasks require a CUDA simulation device; pass --device_id 0 (or another GPU id).")
+    # TaskEnv reads the simulation device from config.sim.device (not from the
+    # top-level environment config), then passes it to BaseEnv and SceneManager.
+    env_cfg["sim"]["device"] = f"cuda:{device_id}"
+    return env_cfg
+
+
 def get_embodiment_config(robot_name, key=None):
     if key is not None:
         config_path = os.path.join(ROBOTS_PATH, f"{robot_name}/{key}_robot_config.yml")
