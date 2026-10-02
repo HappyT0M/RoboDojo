@@ -8,6 +8,21 @@ common:
   eval_nums: 50
 
 tasks:
+  put_rope_ball_in_basket:
+    eval_nums: 1
+    physics_device: "cpu"
+    gpu_dynamics_enabled: false
+
+  pass_rope_through_ring:
+    eval_nums: 1
+    physics_device: "cpu"
+    gpu_dynamics_enabled: false
+
+  route_rope_around_posts:
+    eval_nums: 1
+    physics_device: "cpu"
+    gpu_dynamics_enabled: false
+
   match_and_pick_from_conveyor:
     data_source: "teleop"
     scene_config: "conveyor"
@@ -45,9 +60,6 @@ tasks:
   
   fold_clothes_random:
     eval_nums: 25
-
-  put_sponge_in_bowl:
-    eval_nums: 1
   
   arrange_largest_number:
     eval_nums: 25

@@ -7,7 +7,14 @@ import torch
 import transforms3d as t3d
 
 from utils.transformer import *
-from utils.deformable_metrics import ConsecutiveConditionCounter, compute_deformable_containment
+from utils.rope_task_metrics import (
+    ConsecutiveSuccess,
+    ball_in_directed_far_zone,
+    crosses_ring_aperture,
+    gripper_holds_rope,
+    point_inside_oriented_box,
+    polyline_wraps_post,
+)
 
 if TYPE_CHECKING:
     pass
@@ -19,15 +26,134 @@ class Func_Parser:
         self.pre_state = [{} for _ in range(self.num_envs)]
         self.robot_origin_endpose = [{} for _ in range(self.num_envs)]
         self.joint_ratio_transition_state = [{} for _ in range(self.num_envs)]
-        self.deformable_stability_counters = [{} for _ in range(self.num_envs)]
-        self.deformable_containment_diagnostics = [{} for _ in range(self.num_envs)]
+        self.rope_task_state = [{} for _ in range(self.num_envs)]
 
     def reset(self):
         self.pre_state = [{} for _ in range(self.num_envs)]
         self.robot_origin_endpose = [{} for _ in range(self.num_envs)]
         self.joint_ratio_transition_state = [{} for _ in range(self.num_envs)]
-        self.deformable_stability_counters = [{} for _ in range(self.num_envs)]
-        self.deformable_containment_diagnostics = [{} for _ in range(self.num_envs)]
+        self.rope_task_state = [{} for _ in range(self.num_envs)]
+
+    def is_rope_task_success(self, args):
+        """Evaluate the task-specific rigid-link rope goal over a stable window."""
+        env_idx = int(args["env_idx"])
+        config = self.env.task_env_config.get("RopeTask", {})
+        kind = config.get("kind")
+        state = self.rope_task_state[env_idx]
+
+        rope_name = self.layout_manager.get_instance_name(env_idx=env_idx, label="rope")
+        if rope_name is None:
+            return 0.0
+        rope = self.layout_manager.get_scene_object(env_idx=env_idx, inst_name=rope_name)
+        link_count = int(config.get("link_count", 12))
+        env_origin = self.env.sim.scene.env_origins[env_idx].detach().cpu().numpy()
+        rope_points = [
+            rope.get_link_pose(f"segment_{link_idx:02d}")[:3] - env_origin
+            for link_idx in range(link_count)
+        ]
+        ball_pose = rope.get_link_pose(str(config.get("ball_link", "ball")))
+        ball_position = ball_pose[:3] - env_origin
+        condition = False
+
+        if kind == "basket":
+            basket_name = self.layout_manager.get_instance_name(env_idx=env_idx, label="basket")
+            basket_pos, basket_quat = self.layout_manager.get_instance_pose(
+                env_idx=env_idx, inst_name=basket_name
+            )
+            grasped = False
+            for robot in self.robot_manager.robot_list:
+                if getattr(robot, "type", "target") != "target":
+                    continue
+                endpose = self.robot_manager.get_real_endpose(
+                    robot, env_idx_list=[env_idx], is_relative=True
+                )[env_idx]
+                gripper_values = self.robot_manager.get_end_effector_real_val(
+                    robot, env_idx_list=[env_idx]
+                )[env_idx]
+                gripper_value = float(np.mean(gripper_values))
+                scale = robot.gripper_scale
+                open_fraction = (gripper_value - scale[0]) / (scale[1] - scale[0])
+                if gripper_holds_rope(
+                    endpose[:3],
+                    rope_points,
+                    open_fraction,
+                    float(config.get("table_height", 0.765)),
+                    max_open_fraction=float(config.get("max_gripper_open_fraction", 0.25)),
+                ):
+                    grasped = True
+                    break
+            state["grasped_rope"] = state.get("grasped_rope", False) or grasped
+            condition = state["grasped_rope"] and point_inside_oriented_box(
+                ball_position,
+                basket_pos,
+                basket_quat,
+                config.get("basket_bounds"),
+            )
+
+        elif kind == "ring":
+            ring_name = self.layout_manager.get_instance_name(env_idx=env_idx, label="ring")
+            ring_pos, _ = self.layout_manager.get_instance_pose(env_idx=env_idx, inst_name=ring_name)
+            ring_pos = np.asarray(ring_pos, dtype=float).reshape(3)
+            normal = np.asarray(config.get("ring_normal", [0.0, 1.0, 0.0]), dtype=float)
+            normal /= np.linalg.norm(normal)
+            previous = state.get("previous_ball_position")
+            if previous is not None and crosses_ring_aperture(
+                previous,
+                ball_position,
+                ring_pos,
+                normal,
+                float(config.get("ring_inner_radius", 0.096)),
+                float(config.get("ring_margin", 0.018)),
+            ):
+                state["crossed_ring"] = True
+            state["previous_ball_position"] = ball_position.copy()
+            condition = state.get("crossed_ring", False) and ball_in_directed_far_zone(
+                ball_position,
+                ring_pos,
+                normal,
+                min_distance=float(config.get("target_distance_after_ring", 0.10)),
+                max_distance=float(config.get("target_distance_max", 0.22)),
+                tangential_radius=float(config.get("ring_target_radius", 0.08)),
+            )
+
+        elif kind == "posts":
+            slot_name = self.layout_manager.get_instance_name(env_idx=env_idx, label="target_slot")
+            slot_pos, slot_quat = self.layout_manager.get_instance_pose(
+                env_idx=env_idx, inst_name=slot_name
+            )
+            post_positions = []
+            for label in ("post0", "post1"):
+                post_name = self.layout_manager.get_instance_name(env_idx=env_idx, label=label)
+                post_pos, _ = self.layout_manager.get_instance_pose(
+                    env_idx=env_idx, inst_name=post_name
+                )
+                post_positions.append(np.asarray(post_pos, dtype=float).reshape(3))
+            minimum_arc = np.deg2rad(float(config.get("minimum_wrap_arc_degrees", 100)))
+            wrapped_both = all(
+                polyline_wraps_post(
+                    rope_points,
+                    post_position[:2],
+                    post_radius=float(config.get("post_radius", 0.024)),
+                    rope_radius=float(config.get("rope_radius", 0.0045)),
+                    min_arc_radians=minimum_arc,
+                )
+                for post_position in post_positions
+            )
+            condition = wrapped_both and point_inside_oriented_box(
+                ball_position,
+                slot_pos,
+                slot_quat,
+                config.get("slot_bounds"),
+            )
+
+        if kind not in {"basket", "ring", "posts"}:
+            raise ValueError(f"Unknown RopeTask.kind: {kind!r}")
+        counter = state.get("stable_counter")
+        required_steps = int(config.get("stable_steps", 20))
+        if counter is None or counter.required_steps != required_steps:
+            counter = ConsecutiveSuccess(required_steps)
+            state["stable_counter"] = counter
+        return 1.0 if counter.update(bool(condition)) else 0.0
 
     def initialize(self, env):
         self.env = env
@@ -207,73 +333,6 @@ class Func_Parser:
         if polygon.contains(Point_A) and (z_min < pos_A[2]):
             return 1.0
         return 0.0
-
-    def is_deformable_in_container(self, args):
-        """Check FEM node containment in a rigid container for one environment."""
-        env_idx = int(args["env_idx"])
-        deformable_label = args["deformable_label"]
-        container_label = args["container_label"]
-        stable_steps = int(args.get("stable_steps", 30))
-        min_fraction = float(args.get("min_containment_fraction", 0.85))
-        update = bool(args.get("update", True))
-        if stable_steps <= 0:
-            raise ValueError("stable_steps must be a positive integer")
-        if not 0.0 <= min_fraction <= 1.0:
-            raise ValueError("min_containment_fraction must be in [0, 1]")
-
-        deformable_name = self.layout_manager.get_instance_name(label=deformable_label, env_idx=env_idx)
-        container_name = self.layout_manager.get_instance_name(label=container_label, env_idx=env_idx)
-        if deformable_name is None or container_name is None:
-            return 0.0
-        deformable = self.layout_manager.get_scene_object(inst_name=deformable_name, env_idx=env_idx)
-        container = self.layout_manager.get_scene_object(inst_name=container_name, env_idx=env_idx)
-        if deformable is None or container is None:
-            return 0.0
-
-        points_w = deformable.get_nodal_positions_w()
-        if isinstance(points_w, torch.Tensor):
-            points_w = points_w.detach().cpu().numpy()
-        points_w = np.asarray(points_w, dtype=np.float64).reshape(-1, 3)
-        # RoboDojo rigid wrappers expose pose through LayoutManager; their
-        # `_get_object_transform()` includes the environment origin and keeps
-        # the quaternion in Isaac's (w, x, y, z) convention.
-        bowl_pos_w, bowl_quat_w = self.layout_manager.get_instance_pose(
-            env_idx=env_idx, inst_name=container_name, relative=False
-        )
-        if isinstance(bowl_pos_w, torch.Tensor):
-            bowl_pos_w = bowl_pos_w.detach().cpu().numpy()
-        if isinstance(bowl_quat_w, torch.Tensor):
-            bowl_quat_w = bowl_quat_w.detach().cpu().numpy()
-
-        metrics = compute_deformable_containment(
-            points_w=points_w,
-            bowl_pos_w=np.asarray(bowl_pos_w).reshape(3),
-            bowl_quat_w=np.asarray(bowl_quat_w).reshape(4),
-            interior_bounds=args["interior_bounds"],
-            rim_z=float(args["rim_z"]),
-        )
-        condition = metrics.center_inside and metrics.contained_fraction >= min_fraction
-        counter_key = f"{deformable_name}:{container_name}"
-        counters = self.deformable_stability_counters[env_idx]
-        counter = counters.get(counter_key)
-        if counter is None or counter.required_steps != stable_steps:
-            counter = ConsecutiveConditionCounter(stable_steps)
-            counters[counter_key] = counter
-        if update:
-            stable = counter.update(condition)
-        else:
-            stable = condition and counter.count >= stable_steps
-        self.deformable_containment_diagnostics[env_idx][counter_key] = {
-            "center_local": metrics.center_local.tolist(),
-            "center_inside": metrics.center_inside,
-            "contained_fraction": metrics.contained_fraction,
-            "contained_count": metrics.contained_count,
-            "node_count": metrics.valid_count,
-            "stable_count": counter.count,
-            "required_stable_steps": stable_steps,
-            "success": bool(stable),
-        }
-        return 1.0 if stable else 0.0
 
     def is_A_not_in_B(self, args):
         env_idx = args["env_idx"]

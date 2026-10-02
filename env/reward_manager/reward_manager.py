@@ -694,28 +694,6 @@ class RewardManager:
         args = {"label_A": label_A, "label_B": label_B}
         return ("is_A_not_in_B", args)
 
-    def is_deformable_in_container(
-        self,
-        deformable_label,
-        container_label,
-        interior_bounds,
-        rim_z,
-        min_containment_fraction=0.85,
-        stable_steps=30,
-        update=True,
-    ):
-        """Check FEM node containment and require a consecutive stable window."""
-        args = {
-            "deformable_label": deformable_label,
-            "container_label": container_label,
-            "interior_bounds": interior_bounds,
-            "rim_z": rim_z,
-            "min_containment_fraction": min_containment_fraction,
-            "stable_steps": stable_steps,
-            "update": update,
-        }
-        return ("is_deformable_in_container", args)
-
     def is_A_fluid_in_B(
         self,
         label_A,

@@ -6,23 +6,21 @@ from env.global_configs import *
 from utils.load_file import *
 
 
-def configure_task_sim_device(env_cfg, device_id):
-    """Use the visible CUDA device selected by ``device_id`` for FEM tasks.
+def apply_task_physics_settings(env_cfg, task_info):
+    """Apply optional task-scoped physics settings to the simulation config."""
+    sim_cfg = env_cfg.get("sim")
+    if sim_cfg is None:
+        env_cfg["sim"] = {}
+        sim_cfg = env_cfg["sim"]
+    physics_device = task_info.get("physics_device")
+    if physics_device is not None:
+        if physics_device not in ("cpu", "cuda") and not str(physics_device).startswith("cuda:"):
+            raise ValueError(f"Unsupported physics_device {physics_device!r}; expected 'cpu' or a CUDA device.")
+        sim_cfg["device"] = physics_device
 
-    RoboDojo otherwise defaults its simulation device to CPU. The selected
-    index is relative to GPUs already visible to the process; do not mask
-    devices with ``CUDA_VISIBLE_DEVICES`` because Omniverse enumerates GPUs
-    independently for Vulkan and PhysX.
-    """
-    task_config = env_cfg.get("task_env", {})
-    if not task_config.get("Deformable"):
-        return env_cfg
-
-    if not isinstance(device_id, int) or device_id < 0:
-        raise ValueError("FEM deformable tasks require a CUDA simulation device; pass --device_id 0 (or another GPU id).")
-    # TaskEnv reads the simulation device from config.sim.device (not from the
-    # top-level environment config), then passes it to BaseEnv and SceneManager.
-    env_cfg["sim"]["device"] = f"cuda:{device_id}"
+    gpu_dynamics_enabled = task_info.get("gpu_dynamics_enabled")
+    if gpu_dynamics_enabled is not None:
+        sim_cfg["gpu_dynamics_enabled"] = bool(gpu_dynamics_enabled)
     return env_cfg
 
 
@@ -98,6 +96,7 @@ def process_config(env_cfg, task_name):
     info = load_yaml(task_index_path)
     task_info = info["tasks"].get(task_name, {})
     common_info = info.get("common", {})
+    apply_task_physics_settings(env_cfg, task_info)
 
     if _task_setting(task_info, common_info, "data_source", "datagen") == "teleop":
         _enable_teleop_physx_stabilization(env_cfg["sim"])

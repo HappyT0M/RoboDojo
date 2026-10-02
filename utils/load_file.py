@@ -39,12 +39,13 @@ def load_object_metadata(modeldir, index):
     # 1. load trajectory json
     p = obj_path / "metadata.json"
     if not p.exists():
-        raise FileNotFoundError(f"Required object metadata not found: {p}")
+        return None
     try:
         with p.open("r", encoding="utf-8") as f:
             data = json.load(f)
     except json.JSONDecodeError as e:
-        raise ValueError(f"Invalid object metadata JSON at {p}: {e}") from e
+        print(f"Error decoding JSON from file {p}: {e}")
+        return None
 
     output["physics"] = data.get("physics", {})
     output["visual"] = data.get("visual", {})
@@ -55,7 +56,7 @@ def load_object_metadata(modeldir, index):
 
     for key in required_keys:
         if output.get(key) == {}:
-            raise ValueError(f"Object metadata at {p} is missing required non-empty '{key}' data")
+            return None
 
     return output
 

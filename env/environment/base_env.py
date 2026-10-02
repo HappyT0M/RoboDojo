@@ -11,6 +11,7 @@ from omni.physx import acquire_physx_interface
 
 from env.environment.isaac.isaac_rl_env import IsaacRLEnv
 from env.seeding import seed_everywhere
+from utils.rope_task_metrics import resolve_physx_gpu_override
 
 DEFAULT_SIM_DEVICE = "cpu"
 DEFAULT_USE_FABRIC = False
@@ -186,18 +187,21 @@ class BaseEnv(gym.Env):
         sim backend step
         """
         self.sim.sim_step(render=render)
-        scene_manager = getattr(self, "scene_manager", None)
-        if scene_manager is not None:
-            scene_manager.update_deformable_objects(self.sim.step_dt)
 
     def setup_physics(self, sim: IsaacRLEnv):
         """
         Setup the physics for the simulation.
         This function will be called after simulation context is created
         """
-        # enable cpu garment and deformable
+        # Respect the task's CPU/GPU PhysX choice. Existing configurations keep
+        # the historical GPU override unless they explicitly disable it.
         self.physics_interface = acquire_physx_interface()
-        self.physics_interface.overwrite_gpu_setting(1)
+        gpu_override = resolve_physx_gpu_override(self.config)
+        self.physics_interface.overwrite_gpu_setting(gpu_override)
+        print(
+            f"[physics] sim.device={self.device}, PhysX GPU override={gpu_override} "
+            "(0=CPU, 1=GPU)"
+        )
 
         # expose physics context
         self.physics_context = sim.sim.get_physics_context()

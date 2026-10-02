@@ -1,0 +1,37 @@
+Articulation:
+  - common:
+      relative_plane: "Table"
+      rotate_rand: false
+      qpos: [1, 0, 0, 0]
+    category:
+      - name: "rope_chain"
+        index: [0]
+    select_mode:
+      nums: 1
+      mode: "same"
+      label: ["rope"]
+
+Geometry:
+  - common:
+      relative_plane: "Table"
+      rotate_rand: false
+      qpos: [1, 0, 0, 0]
+    category:
+      - name: "rope_ring"
+        index: [0]
+    select_mode:
+      nums: 1
+      mode: "same"
+      label: ["ring"]
+
+RopeTask:
+  kind: "ring"
+  link_count: 12
+  ball_link: "ball"
+  ring_normal: [0.0, 1.0, 0.0]
+  ring_inner_radius: 0.096
+  ring_margin: 0.018
+  target_distance_after_ring: 0.10
+  target_distance_max: 0.22
+  ring_target_radius: 0.08
+  stable_steps: 20

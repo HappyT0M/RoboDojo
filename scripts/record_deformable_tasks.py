@@ -111,7 +111,6 @@ from src.eval_client.eval_env import create_eval_env  # noqa: E402
 from utils.load_file import load_yaml  # noqa: E402
 from utils.xlens_snapshot import populate_manifest_objects, save_robodojo_snapshot  # noqa: E402
 from utils.pipeline_utils import (  # noqa: E402
-    configure_task_sim_device,
     process_config,
     process_randomization,
     resolve_random_task_num_envs,
@@ -215,7 +214,6 @@ def build_env(task_name: str):
     env_cfg = process_randomization(env_cfg)
     env_cfg, eval_num = process_config(env_cfg, task_name=task_name)
     eval_cfg["eval_num"] = eval_num
-    configure_task_sim_device(env_cfg, args_cli.device_id)
 
     OmegaConf.update(
         env_cfg,

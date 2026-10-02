@@ -1,0 +1,34 @@
+Articulation:
+  - common:
+      relative_plane: "Table"
+      rotate_rand: false
+      qpos: [1, 0, 0, 0]
+    category:
+      - name: "rope_chain"
+        index: [0]
+    select_mode:
+      nums: 1
+      mode: "same"
+      label: ["rope"]
+
+Geometry:
+  - common:
+      relative_plane: "Table"
+      rotate_rand: false
+      qpos: [1, 0, 0, 0]
+    category:
+      - name: "rope_basket"
+        index: [0]
+    select_mode:
+      nums: 1
+      mode: "same"
+      label: ["basket"]
+
+RopeTask:
+  kind: "basket"
+  link_count: 12
+  ball_link: "ball"
+  basket_bounds: [[-0.09, 0.09], [-0.06, 0.06], [0.026, 0.065]]
+  stable_steps: 20
+  table_height: 0.765
+  max_gripper_open_fraction: 0.25

@@ -1,0 +1,47 @@
+Articulation:
+  - common:
+      relative_plane: "Table"
+      rotate_rand: false
+      qpos: [1, 0, 0, 0]
+    category:
+      - name: "rope_chain"
+        index: [0]
+    select_mode:
+      nums: 1
+      mode: "same"
+      label: ["rope"]
+
+Geometry:
+  - common:
+      relative_plane: "Table"
+      rotate_rand: false
+      qpos: [1, 0, 0, 0]
+    category:
+      - name: "rope_post"
+        index: [0]
+    select_mode:
+      nums: 2
+      mode: "same"
+      label: ["post0", "post1"]
+  -
+    common:
+      relative_plane: "Table"
+      rotate_rand: false
+      qpos: [1, 0, 0, 0]
+    category:
+      - name: "rope_slot"
+        index: [0]
+    select_mode:
+      nums: 1
+      mode: "same"
+      label: ["target_slot"]
+
+RopeTask:
+  kind: "posts"
+  link_count: 12
+  ball_link: "ball"
+  post_radius: 0.024
+  rope_radius: 0.0045
+  minimum_wrap_arc_degrees: 100
+  slot_bounds: [[-0.09, 0.09], [-0.05, 0.05], [0.026, 0.040]]
+  stable_steps: 20
