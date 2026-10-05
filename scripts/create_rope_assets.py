@@ -78,16 +78,6 @@ def _add_box(points, faces, center, size):
         faces.append(tuple(start + index for index in face))
 
 
-def _basket_mesh(width=0.24, depth=0.18, height=0.085, wall=0.008):
-    points, faces = [], []
-    _add_box(points, faces, (0, 0, wall / 2), (width, depth, wall))
-    _add_box(points, faces, (0, -depth / 2 + wall / 2, height / 2), (width, wall, height))
-    _add_box(points, faces, (0, depth / 2 - wall / 2, height / 2), (width, wall, height))
-    _add_box(points, faces, (-width / 2 + wall / 2, 0, height / 2), (wall, depth, height))
-    _add_box(points, faces, (width / 2 - wall / 2, 0, height / 2), (wall, depth, height))
-    return points, faces
-
-
 def _slot_mesh(width=0.22, depth=0.14, height=0.06, wall=0.008):
     points, faces = [], []
     _add_box(points, faces, (0, 0, wall / 2), (width, depth, wall))
@@ -299,10 +289,18 @@ def _write_rope_asset():
     )
 
 
-def _entry(category, label, position, quaternion=(1, 0, 0, 0), object_type="geometry", scale=(1, 1, 1)):
+def _entry(
+    category,
+    label,
+    position,
+    quaternion=(1, 0, 0, 0),
+    object_type="geometry",
+    scale=(1, 1, 1),
+    category_idx=0,
+):
     entry = {
         "category": category,
-        "category_idx": 0,
+        "category_idx": category_idx,
         "group": None,
         "label": label,
         "default_pos": list(position),
@@ -362,8 +360,6 @@ def _write_layout(task_name, objects):
 
 def generate_assets():
     _write_rope_asset()
-    basket, basket_faces = _basket_mesh()
-    _write_geometry_asset("rope_basket", basket, basket_faces, (0.68, 0.55, 0.36))
     ring, ring_faces = _ring_mesh()
     _write_geometry_asset("rope_ring", ring, ring_faces, (0.78, 0.78, 0.78))
     post, post_faces = _post_mesh()
@@ -376,7 +372,7 @@ def generate_assets():
         {
             "Articulation": {"rope_chain": [_entry("rope_chain", "rope", [-0.28, -0.12, 0.79], object_type="articulation")]},
             "Geometry": {
-                "rope_basket": [_entry("rope_basket", "basket", [0.34, 0.14, 0.765])],
+                "basket": [_entry("basket", "basket", [0.34, 0.14, 0.8035], category_idx=2)],
             },
         },
     )
@@ -404,7 +400,7 @@ def generate_assets():
             },
         },
     )
-    print("Generated CPU rope chain, fixtures, metadata, and three seed-0 layouts.")
+    print("Generated CPU rope chain, three fixtures, metadata, and three seed-0 layouts.")
 
 
 if __name__ == "__main__":

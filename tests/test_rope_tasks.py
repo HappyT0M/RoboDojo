@@ -42,6 +42,34 @@ def test_three_rope_tasks_are_registered_as_cpu_only_articulations():
         assert layout_path.is_file()
 
 
+def test_basket_task_uses_existing_centered_geometry_asset():
+    task_config = yaml.safe_load(
+        (ROOT / "task/RoboDojo/config/put_rope_ball_in_basket.yml").read_text(encoding="utf-8")
+    )
+    layout = yaml.safe_load(
+        (ROOT / "Assets/Eval_Layout/RoboDojo/arx_x5/0/put_rope_ball_in_basket_0.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    basket_spec = task_config["Geometry"][0]["category"][0]
+    basket = layout["Geometry"]["basket"][0]
+    assert basket_spec == {"name": "basket", "index": [2]}
+    assert basket["category"] == "basket"
+    assert basket["category_idx"] == 2
+    assert basket["default_pos"] == [0.34, 0.14, 0.8035]
+
+    basket_dir = ROOT / "Assets/Object/RoboDojo/Geometry/basket/00002"
+    assert (basket_dir / "object.usdz").is_file()
+    metadata = yaml.safe_load((basket_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["geometry"]["aligned_bbox"]["extents"] == [0.252, 0.168, 0.077]
+    assert task_config["RopeTask"]["basket_bounds"] == [
+        [-0.09, 0.09],
+        [-0.06, 0.06],
+        [-0.0126, 0.0264],
+    ]
+
+
 def test_cpu_task_settings_override_sim_device_and_keep_default_gpu_behavior():
     from utils.pipeline_utils import apply_task_physics_settings
 
@@ -79,7 +107,7 @@ def test_generated_rope_usd_assets_and_seed_layouts_are_present():
     assert 'def PhysicsFixedJoint "joint_ball"' in contents
     assert 'bool physxArticulation:enabledSelfCollisions = false' in contents
 
-    for category in ("rope_basket", "rope_ring", "rope_post", "rope_slot"):
+    for category in ("rope_ring", "rope_post", "rope_slot"):
         asset_dir = ROOT / f"Assets/Object/RoboDojo/Geometry/{category}/00000"
         assert (asset_dir / "object.usd").is_file()
         metadata = yaml.safe_load((asset_dir / "metadata.json").read_text(encoding="utf-8"))

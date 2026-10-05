@@ -32,7 +32,7 @@
 - 修改 `task/RoboDojo/config/_task.yml` 与 `utils/pipeline_utils.py`：支持任务级 `physics_device` 和 `gpu_dynamics_enabled` 字段，并将其写入 `env_cfg.sim`。
 - 修改 `env/environment/base_env.py`：读取 `gpu_dynamics_enabled` 配置；默认值保持既有任务行为，CPU-only 绳索任务显式关闭 GPU dynamics。
 - 保留 `env/scene_manager/objects/articulation.py`：复用已有 USD articulation 加载、摆放、复位接口，不新增 FEM 对象类型。
-- 新增一个 ASCII USD `Articulation` 资产生成脚本及其生成文件，放入 `Assets/Object/RoboDojo/Articulation/rope_chain/00000/`；资产使用 `object.usd`，包含 12 个胶囊刚体、交替轴向的串联转动关节及末端刚性球。绳链采用米白色外观，球采用哑光彩色外观。
+- 新增一个 ASCII USD 资产生成脚本及其生成文件：绳链放入 `Assets/Object/RoboDojo/Articulation/rope_chain/00000/`，环、柱和终点槽放入 `Assets/Object/RoboDojo/Geometry/`。篮子复用 RoboDojo 原有 `Geometry/basket/00002`，不再为 T1 生成自制篮子。绳链使用 12 个胶囊刚体、交替轴向的串联转动关节及末端刚性球；绳链为米白色，球为哑光彩色。
 - 新增 `task/RoboDojo/config/rope_*.yml`：分别声明三个任务的对象、标签和目标几何；在 `_task.yml` 注册项设定 `physics_device: cpu` 与 `gpu_dynamics_enabled: false`。配置中不得出现 `Deformable`、`Garment` 或 `Fluid` 对象。
 - 新增 `task/RoboDojo/tasks/rope_*.py`：复用 `TaskEnv` 和现有双臂控制接口，实现三个初始场景和语言指令；共用绳链任务基类，避免复制 reset 与状态读取逻辑。
 - 修改 `task/RoboDojo/config/_task.yml`：注册三个任务。

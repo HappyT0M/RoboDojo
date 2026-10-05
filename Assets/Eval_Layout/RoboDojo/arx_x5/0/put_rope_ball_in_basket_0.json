@@ -33,16 +33,16 @@
     ]
   },
   "Geometry": {
-    "rope_basket": [
+    "basket": [
       {
-        "category": "rope_basket",
-        "category_idx": 0,
+        "category": "basket",
+        "category_idx": 2,
         "group": null,
         "label": "basket",
         "default_pos": [
           0.34,
           0.14,
-          0.765
+          0.8035
         ],
         "default_ori": [
           1,

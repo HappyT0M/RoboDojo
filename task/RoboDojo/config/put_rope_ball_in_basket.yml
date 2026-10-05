@@ -17,8 +17,8 @@ Geometry:
       rotate_rand: false
       qpos: [1, 0, 0, 0]
     category:
-      - name: "rope_basket"
-        index: [0]
+      - name: "basket"
+        index: [2]
     select_mode:
       nums: 1
       mode: "same"
@@ -28,7 +28,7 @@ RopeTask:
   kind: "basket"
   link_count: 12
   ball_link: "ball"
-  basket_bounds: [[-0.09, 0.09], [-0.06, 0.06], [0.026, 0.065]]
+  basket_bounds: [[-0.09, 0.09], [-0.06, 0.06], [-0.0126, 0.0264]]
   stable_steps: 20
   table_height: 0.765
   max_gripper_open_fraction: 0.25
