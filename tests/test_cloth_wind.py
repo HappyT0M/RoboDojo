@@ -3,6 +3,7 @@ import pytest
 from utils.cloth_wind import (
     apply_cloth_runtime_overrides,
     apply_constant_cloth_wind,
+    apply_constant_cloth_wind_if_present,
     collect_cloth_wind_readbacks,
 )
 
@@ -77,6 +78,15 @@ def test_invalid_wind_vector_is_rejected(wind):
 def test_nonzero_wind_requires_garment_object():
     with pytest.raises(ValueError, match="Garment"):
         apply_constant_cloth_wind({"Object": []}, (0.5, 0.0, 0.0))
+
+
+def test_conditional_cloth_wind_allows_rigid_only_task_without_garment():
+    task_cfg = {"Articulation": [{"category": [{"name": "rope_chain"}]}]}
+
+    wind = apply_constant_cloth_wind_if_present(task_cfg, (0.0, 0.5, 0.0), particle_drag=0.6)
+
+    assert wind == [0.0, 0.5, 0.0]
+    assert "Garment" not in task_cfg
 
 
 class _FakeParticleSystem:

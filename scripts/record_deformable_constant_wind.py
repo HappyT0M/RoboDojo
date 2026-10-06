@@ -1,4 +1,4 @@
-"""在不接入策略、不修改任务文件的情况下录制布料恒定风视频。
+"""在不接入策略、不修改任务文件的情况下录制恒定风扰动任务。
 
 在 RoboDojo 根目录运行，例如：
 
@@ -9,10 +9,19 @@
         --device_id 1 \
         --out_dir eval_result/constant_wind_preview
 
-脚本只在内存中给 Garment 实例设置 ``physics.particle_system.wind``，不会修改
-``task/RoboDojo/config`` 下的 YAML。布料对象会把配置应用到 Isaac Sim 的
-``SingleParticleSystem``；录制脚本可用 ``--no-wind`` 关闭，或用 ``--wind WX WY WZ``
-指定恒定风速向量（单位 m/s）。
+    python scripts/record_deformable_constant_wind.py \
+        --task_name put_rope_ball_in_basket \
+        --duration_s 10 \
+        --wind 0.0 0.5 0.0 \
+        --rigid_force_scale 100 \
+        --device_id 0 \
+        --disable_xlens_snapshot \
+        --out_dir eval_result/rope_basket_wind --headless
+
+脚本只修改内存中的运行配置，不修改 ``task/RoboDojo/config`` 下的 YAML。
+布料使用 Isaac Sim 粒子系统风速；可移动刚体和任务关节链 link 使用逐物体计算的
+空气阻力。机器人与静态场景资产不受风。``--wind WX WY WZ`` 表示恒定环境风速
+（单位 m/s），``--rigid_force_scale`` 用于调节简化刚体风阻的可观察程度。
 """
 
 from __future__ import annotations
@@ -34,7 +43,14 @@ for _root in (_PROJECT_ROOT, _XPOLICYLAB_ROOT):
 from isaaclab.app import AppLauncher
 
 
-parser = argparse.ArgumentParser(description="Record RoboDojo deformable tasks under constant cloth wind.")
+def _nonnegative_finite_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed) or parsed < 0.0:
+        raise argparse.ArgumentTypeError("must be a finite non-negative number")
+    return parsed
+
+
+parser = argparse.ArgumentParser(description="Record RoboDojo tasks under constant wind perturbations.")
 parser.add_argument("--task_name", type=str, default=None, help="单个任务名，与 --tasks 二选一")
 parser.add_argument(
     "--tasks",
@@ -49,7 +65,7 @@ parser.add_argument(
     nargs=3,
     default=(0.5, 0.0, 0.0),
     metavar=("WX", "WY", "WZ"),
-    help="布料粒子系统恒定风向量/速度向量；默认 0.5 0 0，传入 0 0 0 可关闭风力",
+    help="恒定环境风速向量，单位 m/s；默认 0.5 0 0，传入 0 0 0 可关闭风力",
 )
 parser.add_argument(
     "--no-wind",
@@ -61,6 +77,18 @@ parser.add_argument(
     type=float,
     default=0.5,
     help="布料粒子材质 drag；默认 0.5，便于观察风力响应",
+)
+parser.add_argument(
+    "--rigid_drag_coefficient",
+    type=_nonnegative_finite_float,
+    default=1.0,
+    help="刚体风阻系数 Cd；默认 1.0",
+)
+parser.add_argument(
+    "--rigid_force_scale",
+    type=_nonnegative_finite_float,
+    default=100.0,
+    help="刚体风阻缩放系数；默认 100，越大扰动越明显，0 关闭刚体风力分量",
 )
 parser.add_argument("--num_envs", type=int, default=1, help="并行环境数，录制时建议保持 1")
 parser.add_argument("--env_cfg_type", type=str, default="arx_x5", help="env_cfg 下的配置名，不含 .yml")
@@ -116,7 +144,8 @@ from env.observation_manager.obs_manager import ObsManager  # noqa: E402
 from src.eval_client.eval_env import create_eval_env  # noqa: E402
 from utils.load_file import load_yaml  # noqa: E402
 from utils.pipeline_utils import process_config, process_randomization, resolve_random_task_num_envs  # noqa: E402
-from utils.cloth_wind import apply_constant_cloth_wind, collect_cloth_wind_readbacks  # noqa: E402
+from utils.cloth_wind import apply_constant_cloth_wind_if_present, collect_cloth_wind_readbacks  # noqa: E402
+from utils.rigid_wind import create_rigid_wind_controller, install_sim_step_wind_hook  # noqa: E402
 from utils.xlens_snapshot import populate_manifest_objects, save_robodojo_snapshot  # noqa: E402
 
 BENCHMARK_PATH = os.path.join(ROOT_DIR, "task", BENCHMARK)
@@ -167,7 +196,7 @@ def _inject_constant_wind(task_cfg: dict) -> None:
     """只修改内存中的任务配置，不触碰原始 YAML 文件。"""
     wind = _selected_wind()
     has_wind = any(value != 0.0 for value in wind)
-    apply_constant_cloth_wind(
+    apply_constant_cloth_wind_if_present(
         task_cfg,
         wind,
         particle_drag=float(args_cli.particle_drag) if has_wind else None,
@@ -178,13 +207,25 @@ def _selected_wind() -> list[float]:
     return [0.0, 0.0, 0.0] if args_cli.no_wind else [float(value) for value in args_cli.wind]
 
 
-def _log_wind_readback(env, task_name: str, phase: str, log_path: str) -> dict:
-    """Record the requested wind and values read from live particle systems."""
+def _log_wind_readback(
+    env,
+    task_name: str,
+    phase: str,
+    log_path: str,
+    rigid_wind_controller=None,
+    rigid_wind_skipped=None,
+) -> dict:
+    """Record the requested wind and values read from live particle/rigid views."""
     requested_wind = _selected_wind()
     scene_manager = getattr(env, "scene_manager", None)
     garments_by_env = getattr(scene_manager, "_garment_objects", [])
     garments = collect_cloth_wind_readbacks(garments_by_env, requested_wind)
-    matches = bool(garments) and all(item["matches_request"] for item in garments)
+    matches = all(item["matches_request"] for item in garments) if garments else None
+    rigid_wind = (
+        rigid_wind_controller.last_diagnostics
+        if rigid_wind_controller is not None
+        else {"body_count": 0, "applied_body_count": 0, "bodies": []}
+    )
     record = {
         "timestamp": datetime.now().astimezone().isoformat(timespec="seconds"),
         "task_name": task_name,
@@ -193,9 +234,13 @@ def _log_wind_readback(env, task_name: str, phase: str, log_path: str) -> dict:
         "requested_particle_drag": float(args_cli.particle_drag)
         if any(value != 0.0 for value in requested_wind)
         else None,
+        "requested_rigid_drag_coefficient": float(args_cli.rigid_drag_coefficient),
+        "requested_rigid_force_scale": float(args_cli.rigid_force_scale),
         "garment_count": len(garments),
         "all_match_request": matches,
         "garments": garments,
+        "rigid_wind": rigid_wind,
+        "rigid_wind_skipped": rigid_wind_skipped or [],
     }
     try:
         with open(log_path, "a", encoding="utf-8") as f:
@@ -215,10 +260,17 @@ def _log_wind_readback(env, task_name: str, phase: str, log_path: str) -> dict:
             f"actual={item['actual_wind']} matches={item['matches_request']} "
             f"error={item['readback_error']}"
         )
-    if not garments:
-        print("[wind-record][WARN] 场景管理器中没有找到已创建的 Garment 粒子系统")
-    elif not matches:
+    if garments and not matches:
         print("[wind-record][WARN] 实际风速读回失败或与请求值不一致")
+    if rigid_wind_controller is not None:
+        print(
+            f"[wind-record][rigid-wind] task={task_name} phase={phase} "
+            f"bodies={rigid_wind['body_count']} applied={rigid_wind['applied_body_count']} "
+            f"force_scale={args_cli.rigid_force_scale}"
+        )
+    if rigid_wind_skipped:
+        for item in rigid_wind_skipped:
+            print(f"[wind-record][rigid-wind][skip] {item['label']}: {item['reason']}")
     return record
 
 
@@ -304,13 +356,41 @@ def _steps_for_duration(env) -> int:
 def _record_task(task_name: str) -> str:
     print(f"\n{'=' * 70}\n[wind-record] 开始任务: {task_name}\n{'=' * 70}")
     env, num_envs = _build_env(task_name)
+    original_sim_step = None
     try:
         record_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         task_output_dir = os.path.join(args_cli.out_dir, task_name)
         os.makedirs(task_output_dir, exist_ok=True)
         wind_log_path = os.path.join(task_output_dir, f"wind_diagnostics_{record_timestamp}.jsonl")
         env.reset(seed=[args_cli.seed])
-        _log_wind_readback(env, task_name, "after_reset", wind_log_path)
+        wind = _selected_wind()
+        has_wind = any(value != 0.0 for value in wind)
+        rigid_wind_controller = None
+        rigid_wind_skipped = []
+        if has_wind and args_cli.rigid_force_scale > 0.0:
+            rigid_wind_controller, rigid_wind_skipped = create_rigid_wind_controller(
+                env.scene_manager,
+                wind,
+                drag_coefficient=args_cli.rigid_drag_coefficient,
+                force_scale=args_cli.rigid_force_scale,
+            )
+        if rigid_wind_controller is not None:
+            original_sim_step = install_sim_step_wind_hook(env, rigid_wind_controller)
+        garments_by_env = getattr(env.scene_manager, "_garment_objects", [])
+        has_garments = any(bool(objects) for objects in garments_by_env)
+        if has_wind and not has_garments and rigid_wind_controller is None:
+            raise RuntimeError(
+                "风力未应用：任务中没有布料，且没有找到可施力的动态任务刚体。"
+                "请查看刚体筛选诊断或确认资产带有 RigidBodyAPI。"
+            )
+        _log_wind_readback(
+            env,
+            task_name,
+            "after_reset",
+            wind_log_path,
+            rigid_wind_controller=rigid_wind_controller,
+            rigid_wind_skipped=rigid_wind_skipped,
+        )
         if not args_cli.disable_xlens_snapshot and args_cli.xlens_snapshot_dir:
             snapshot_dir = os.path.join(
                 args_cli.xlens_snapshot_dir,
@@ -332,20 +412,26 @@ def _record_task(task_name: str) -> str:
             env.get_score()
         action = _neutral_action(env)
         steps = _steps_for_duration(env)
-        wind = _selected_wind()
-        has_wind = any(value != 0.0 for value in wind)
         print(
             f"[wind-record] task={task_name} num_envs={num_envs} "
             f"duration≈{args_cli.duration_s:.2f}s steps={steps} "
             f"wind={wind} ({'on' if has_wind else 'off'})"
-            f"{' drag=' + str(args_cli.particle_drag) if has_wind else ''}"
+            f"{' cloth_drag=' + str(args_cli.particle_drag) if has_wind and has_garments else ''}"
+            f"{' rigid_force_scale=' + str(args_cli.rigid_force_scale) if rigid_wind_controller else ''}"
         )
 
         for step in range(steps):
             env.take_action(action)
             env.get_obs()
             if step == 0:
-                _log_wind_readback(env, task_name, "after_first_step", wind_log_path)
+                _log_wind_readback(
+                    env,
+                    task_name,
+                    "after_first_step",
+                    wind_log_path,
+                    rigid_wind_controller=rigid_wind_controller,
+                    rigid_wind_skipped=rigid_wind_skipped,
+                )
             if (step + 1) % max(1, int(getattr(env.obs_manager, "collect_freq", 25))) == 0:
                 print(f"[wind-record] {task_name}: {step + 1}/{steps}")
 
@@ -365,6 +451,8 @@ def _record_task(task_name: str) -> str:
         print(f"[wind-record] 风力诊断: {wind_log_path}")
         return task_output_dir
     finally:
+        if original_sim_step is not None:
+            env.sim_step = original_sim_step
         env.close()
 
 

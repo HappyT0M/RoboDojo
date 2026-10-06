@@ -49,6 +49,21 @@ def apply_constant_cloth_wind(
     return vector
 
 
+def apply_constant_cloth_wind_if_present(
+    task_cfg: MutableMapping,
+    wind: Sequence[float] | None,
+    particle_drag: float | None = None,
+) -> list[float]:
+    """Apply particle-system wind when the task contains garments.
+
+    Rigid-only tasks still use the recording script's rigid-body wind path, so
+    their absence of a ``Garment`` section is not an error here.
+    """
+    if not task_cfg.get("Garment"):
+        return _normalize_wind(wind)
+    return apply_constant_cloth_wind(task_cfg, wind, particle_drag=particle_drag)
+
+
 def apply_cloth_runtime_overrides(scene_layout, task_cfg) -> None:
     """Overlay runtime garment physics settings onto a generated scene layout.
 

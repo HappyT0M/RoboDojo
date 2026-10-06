@@ -1,32 +1,32 @@
-# Constant Wind for Deformable and Movable Task Assets
+# 可形变与可移动任务物体的恒定风力
 
-## Goal
+## 目标
 
-Extend the existing constant-wind recording workflow so one wind vector can affect cloth, the rope-and-ball articulation, and movable task rigid bodies. The feature remains a recording-time override and does not edit task YAML or generated asset files.
+扩展现有恒定风力录制流程，使同一风速向量能够作用于布料、绳球关节链和可移动任务刚体。功能仅在录制时覆盖运行参数，不修改任务 YAML 或生成的资产文件。
 
-## Scope and exclusions
+## 范围与排除项
 
-- Keep native particle-system wind for `Garment` assets.
-- Apply aerodynamic drag to movable `RigidObject` assets and eligible movable task `ArticulationObject` assets, including rope links and the attached ball.
-- Explicitly exclude robot articulations, fixed-base bodies, static `Geometry`, tables, rooms, and backgrounds.
-- Do not add fluid wind in this first version; particle-fluid behavior needs separate API and stability validation.
-- Preserve the existing `--wind WX WY WZ` and `--no-wind` controls. The vector represents ambient wind velocity in m/s, not a force value.
+- 布料（`Garment`）继续使用 Isaac Sim 粒子系统的原生风力接口。
+- 对可移动的 `RigidObject` 和符合条件的任务 `ArticulationObject` 施加空气阻力，包括绳链各节和拴着的球。
+- 明确排除机器人关节体、固定基座物体、静态 `Geometry`、桌子、房间和背景。
+- 第一版不加入流体风力；流体粒子系统需要单独验证接口和稳定性。
+- 保留现有 `--wind WX WY WZ` 与 `--no-wind` 参数。风向量表示环境风速，单位为 m/s，不代表力的大小。
 
-## Design
+## 设计
 
-The recording script will inject runtime overrides into the loaded task configuration, as it already does for cloth. A recording-time wind controller will discover eligible scene objects by their registered type and task-object identity, never by applying forces to every articulation. It will keep a list of affected bodies and apply drag at every physics update while a recording episode runs. The robot and static fixture registries are not recipients.
+录制脚本会像当前处理布料风力一样，把运行时覆盖项注入已加载的任务配置。录制期间的风力控制器会根据场景对象类型和任务对象身份筛选受力对象；不会对所有关节体一概施力。控制器持续跟踪受力对象，并在每个物理更新时施加阻力。机器人和静态场景物体不纳入受力列表。
 
-Cloth continues to receive the native particle-system wind. Movable rigid bodies and eligible articulation links receive a force based on relative air/object velocity, `F = 0.5 * rho * Cd * A * |v_rel| * v_rel`, where `v_rel` is ambient wind minus body velocity. Cross-sectional area is estimated from runtime body bounds (or link collision dimensions when available); drag coefficient and force scale have conservative configurable defaults. The diagnostic log records requested wind, selected objects, applied-force summaries, and any bodies skipped with a reason.
+布料继续使用粒子系统原生风力。通过 Isaac Sim 5.1 的 `RigidPrim` view 对可移动刚体和符合条件的关节链各节施力，并读取其线速度与姿态。阻力按 `F = 0.5 * rho * Cd * A * |v_rel| * v_rel` 计算，其中 `v_rel` 是环境风速减去物体速度，`A` 根据物体局部包围盒和当前姿态估算。阻力系数默认 1.0；由于资产没有标定空气动力学参数，另提供默认 100 的刚体力缩放参数供录制调节。诊断日志记录请求的风速、选中的对象、逐对象估算面积与施力，以及未施力对象及其原因。
 
-Wind state is reset between runs and is zeroed when `--no-wind` is selected. If an object cannot provide the required dynamic-body view or dimensions, the script reports it clearly and continues with other eligible objects rather than silently claiming wind was applied.
+不同录制任务之间要清理风力状态；使用 `--no-wind` 时，所有对象均不应受到风力。若无法读取某个物体所需的动态刚体视图或尺寸，脚本会说明原因并继续处理其他对象，不会静默地声称风力已生效。
 
-## Validation
+## 验证
 
-- Unit tests verify wind-vector validation, recipient filtering (including robot/static exclusions), force direction and zero-relative-wind behavior, and no-wind reset behavior without importing Isaac Sim.
-- Existing cloth-wind tests continue to pass.
-- An Isaac Sim smoke run records `put_rope_ball_in_basket` with wind disabled and enabled, confirms the rope/ball are selected while the robot and basket are not, and checks the per-step force diagnostics.
-- A movable-rigid task smoke run confirms at least one eligible rigid body receives force. Compare against a zero-wind run to ensure the feature does not affect static fixtures or robot control.
+- 单元测试验证风速向量校验、受力对象筛选（包括排除机器人和静态物体）、受力方向、相对风速为零时的行为，以及关闭风力后的状态清理；这些测试不依赖 Isaac Sim 导入。
+- 现有布料风力测试继续通过。
+- 在 Isaac Sim 中分别录制 `put_rope_ball_in_basket` 的无风和有风版本，确认绳子与球被选中，而机械臂和篮子未被选中，并检查逐步施力诊断。
+- 选一个包含可移动刚体的任务做冒烟测试，确认至少有一个符合条件的刚体收到风力；再与无风录制对比，确认静态场景物体和机械臂不受影响。
 
-## Risks and limits
+## 风险与限制
 
-The wind speed alone does not determine force on rigid objects. Results depend on estimated projected area, drag coefficient, body orientation, mass, and simulation substeps. The initial implementation should favor stability and expose tuning parameters instead of claiming physically exact aerodynamics. Runtime APIs differ across Isaac Sim builds, so the smoke test must run in the target simulator environment before describing the feature as validated.
+仅凭风速不能确定刚体受到的风力大小。结果还取决于估算的迎风面积、阻力系数、物体朝向、质量和仿真子步。第一版应优先保证稳定，并开放参数供调整，不宣称实现了精确的空气动力学。不同 Isaac Sim 版本的运行时接口可能有差异，因此必须在目标仿真环境中完成冒烟测试后，才能说该功能已验证。
