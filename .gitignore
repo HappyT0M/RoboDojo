@@ -56,3 +56,8 @@ ignore/
 .cursor/
 .claude/
 Untitled
+
+# 本地资产、日志、评测结果，不同步到 GitHub
+Assets/
+logs/
+eval_result/
