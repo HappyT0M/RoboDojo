@@ -9,6 +9,42 @@
 | [init_assets.sh](init_assets.sh) | Download robot/object assets |
 | [eval_policy.sh](eval_policy.sh) | Isaac Sim eval client (called by `robodojo.sh client` and XPolicyLab) |
 
+## Keyboard teleoperation for deformable tasks
+
+`teleop_deformable_task.py` opens a GUI Isaac Sim session for manually operating
+the rope-and-ball task. It does not connect to a VLA/WAM policy server. Focus the
+Isaac Sim viewport after startup so it receives keyboard input.
+
+```bash
+python scripts/teleop_deformable_task.py \
+  --task_name put_rope_ball_in_basket \
+  --arm left \
+  --seed 0 \
+  --device_id 0 \
+  --wind 0 0 0 \
+  --out_dir eval_result/teleop_rope
+```
+
+Hold the keys to move the selected end effector in small Cartesian increments:
+
+| Keys | Motion |
+| --- | --- |
+| `W` / `S` | +X / -X |
+| `D` / `A` | +Y / -Y |
+| `R` / `F` | +Z / -Z |
+| `C` / `O` | Close / open gripper |
+| `Esc` | Save and exit |
+
+Select the other arm with `--arm right`. The inactive arm holds its reset joint
+positions. The end-effector orientation stays fixed. Use `--step_m` to change
+movement increments and `--workspace_radius` to limit travel around the reset
+position. Wind is disabled by default; for example, `--wind 0 0.5 0` enables a
+constant 0.5 m/s wind in +Y.
+
+The task directory under `--out_dir` receives per-camera MP4 files and a
+timestamped `_actions.jsonl` control log after exit. This script requires a GUI
+window and cannot be run with `--headless`.
+
 ## Typical eval flow
 
 ```text
