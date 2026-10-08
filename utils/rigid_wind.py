@@ -11,6 +11,7 @@ import math
 from typing import Any, Iterable
 
 import numpy as np
+import torch
 
 
 def _vector3(value: Iterable[float], name: str) -> np.ndarray:
@@ -172,6 +173,7 @@ class RigidWindController:
         air_density: float = 1.225,
         drag_coefficient: float = 1.0,
         force_scale: float = 1.0,
+        device: Any = "cpu",
     ):
         self.view = view
         self.bodies = tuple(bodies)
@@ -179,6 +181,7 @@ class RigidWindController:
         self.air_density = float(air_density)
         self.drag_coefficient = float(drag_coefficient)
         self.force_scale = float(force_scale)
+        self.device = torch.device(device)
         self.last_diagnostics: dict[str, Any] = {
             "body_count": len(self.bodies),
             "applied_body_count": 0,
@@ -222,7 +225,11 @@ class RigidWindController:
             drag_coefficient=self.drag_coefficient,
             scale=self.force_scale,
         )
-        self.view.apply_forces(forces.astype(np.float32), is_global=True)
+        # RigidPrim's Torch backend calls ``.to(device=...)`` on force inputs.
+        # Keep the CPU-side aerodynamic calculation, then move only the final
+        # force batch onto the active PhysX device before submitting it.
+        force_tensor = torch.as_tensor(forces, dtype=torch.float32, device=self.device)
+        self.view.apply_forces(force_tensor, is_global=True)
         body_rows = []
         for body, area, force in zip(self.bodies, areas, forces):
             body_rows.append(
@@ -348,6 +355,7 @@ def create_rigid_wind_controller(
         prepare_contact_sensors=False,
     )
     view.initialize(physics_sim_view=SimulationManager.get_physics_sim_view())
+    physics_device = SimulationManager.get_physics_sim_device()
     return (
         RigidWindController(
             view=view,
@@ -356,6 +364,7 @@ def create_rigid_wind_controller(
             air_density=air_density,
             drag_coefficient=drag_coefficient,
             force_scale=force_scale,
+            device=physics_device,
         ),
         skipped,
     )

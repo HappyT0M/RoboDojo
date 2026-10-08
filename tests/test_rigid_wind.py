@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+import torch
 
 from utils.rigid_wind import (
     RigidBodySpec,
@@ -107,7 +108,7 @@ class _FakeRigidView:
         return np.zeros_like(self.velocities), self.orientations
 
     def apply_forces(self, forces, is_global=True):
-        self.applied.append((np.asarray(forces), is_global))
+        self.applied.append((forces, is_global))
 
 
 def test_controller_reads_body_state_and_applies_global_forces():
@@ -124,7 +125,9 @@ def test_controller_reads_body_state_and_applies_global_forces():
     diagnostics = controller.step()
 
     assert len(view.applied) == 1
-    np.testing.assert_allclose(view.applied[0][0], ((6.0, 0.0, 0.0),))
+    assert isinstance(view.applied[0][0], torch.Tensor)
+    assert view.applied[0][0].device.type == "cpu"
+    np.testing.assert_allclose(view.applied[0][0].numpy(), ((6.0, 0.0, 0.0),))
     assert view.applied[0][1] is True
     assert diagnostics["body_count"] == 1
     assert diagnostics["bodies"][0]["prim_path"] == "/World/rope/segment_00"
