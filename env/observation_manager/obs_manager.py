@@ -11,6 +11,9 @@ class ObsManager:
         "rgb": "color",
         "depth": "depth",
         "distance_to_image_plane": "distance_to_image_plane",
+        "instance_id_segmentation_fast": "instance_id",
+        "instance_segmentation_fast": "instance",
+        "semantic_segmentation": "semantic",
     }
 
     def __init__(

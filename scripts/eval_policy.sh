@@ -26,11 +26,20 @@ seed=""
 host="localhost"
 protocol=""
 policy_server_url=""
+bench_name=""
 extra_args=()
 wind_args=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --bench_name)
+      if [[ $# -lt 2 || "$2" == --* ]]; then
+        echo "[ERROR] Missing value for argument: $1" >&2
+        exit 1
+      fi
+      bench_name="$2"
+      shift 2
+      ;;
     --root_dir|--task_name|--env_cfg_type|--device_id|--policy_name|--port|--eval_batch|--additional_info|--seed|--host|--protocol|--policy_server_url)
       if [[ $# -lt 2 || "$2" == --* ]]; then
         echo "[ERROR] Missing value for argument: $1"
@@ -67,6 +76,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -n "${bench_name}" && "${bench_name}" != "RoboDojo" ]]; then
+  echo "[ERROR] This simulator client only supports bench_name=RoboDojo; got '${bench_name}'." >&2
+  exit 2
+fi
 
 for var_name in root_dir task_name env_cfg_type device_id policy_name port; do
   if [[ -z "${!var_name}" ]]; then
