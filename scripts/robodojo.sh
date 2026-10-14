@@ -113,6 +113,7 @@ run_eval() {
       --eval-env) need_value "$@"; eval_env="$2"; shift 2 ;;
       --policy-dir) need_value "$@"; policy_dir="$(abs_path "$2")"; shift 2 ;;
       --eval-num) need_value "$@"; eval_num="$2"; shift 2 ;;
+      --rigid-force-scale) need_value "$@"; export ROBODOJO_RIGID_FORCE_SCALE="$2"; shift 2 ;;
       --wind)
         if [[ $# -lt 4 ]]; then echo "[robodojo eval] --wind requires WX WY WZ" >&2; exit 2; fi
         wind=("$2" "$3" "$4"); shift 4 ;;
@@ -135,7 +136,8 @@ Common options:
   --seed NUM            Eval seed / layout seed (default: 0)
   --policy-gpu ID       Policy server GPU (default: 0)
   --env-gpu ID          Isaac Sim GPU (default: 0)
-  --wind WX WY WZ       Constant cloth wind velocity in m/s; omit for no wind
+  --wind WX WY WZ       Constant task wind velocity in world coordinates (m/s); omit for no wind
+  --rigid-force-scale N Rigid-body drag multiplier (default: 1; recording script default: 100)
   --eval-env ENV        Simulator conda env (default: RoboDojo)
   --dry-run             Print command without running it
 
@@ -200,7 +202,7 @@ EOF
     printf '[robodojo eval] dry-run: bash %q' "${ROOT_DIR}/scripts/internal/run_policy_eval.sh"
     printf ' %q' "${policy_dir}"
     printf ' %q' "${eval_args[@]}"
-    if [[ ${#wind[@]} -eq 3 ]]; then printf ' [cloth wind: %q %q %q m/s]' "${wind[@]}"; fi
+    if [[ ${#wind[@]} -eq 3 ]]; then printf ' [task wind: %q %q %q m/s]' "${wind[@]}"; fi
     printf '\n'
     return 0
   fi

@@ -125,3 +125,36 @@ Container install and smoke tests live under [../docker/](../docker/), not here.
 ## Policy-specific scripts
 
 Training, data prep, and per-policy `eval.sh` live in [../XPolicyLab/policy/](../XPolicyLab/policy/) (submodule).
+
+## Constant wind during policy evaluation
+
+Every model using the standard RoboDojo evaluation client can use the same
+world-space ambient wind velocity (m/s). Add these options to a working
+`robodojo.sh eval` command; keep its checkpoint, environment and action type:
+
+```bash
+--wind 0.0 0.5 0.0 --rigid-force-scale 100
+```
+
+Rigid wind starts after scene settling and policy reset, before the first policy
+observation, and is applied before **each physics substep**, including when
+simulation decimation exceeds one. Views are rebuilt after each episode reset;
+wind is disabled during reset and settling. Dynamic task bodies and articulation
+links (including rope links and the attached ball) receive drag; robots,
+static geometry, kinematic bodies and fixed-base task articulations are excluded.
+Cloth retains its existing particle-system wind path and initialization timing.
+
+`--rigid-force-scale` defaults to **1**; use **100** to reproduce the default
+multiplier of `record_deformable_constant_wind.py`. This is a simplified drag
+model using projected bounding-box areas, air density 1.225 kg/m³ and Cd=1.
+Keep the multiplier fixed across models. Zero/omitted wind disables rigid drag
+entirely, including still-air damping, preserving the original baseline.
+The equivalent environment variable is `ROBODOJO_RIGID_FORCE_SCALE` (also usable
+with the split client). Requesting wind without any eligible body fails clearly.
+
+Each timestamped result directory contains `_wind.json` with the velocity,
+multiplier, target paths, skipped bodies, physics-step count and last applied
+forces. Completed `_result.json` also includes this under `wind`. Diagnostics
+are saved after reset and after each completed batch, not on every substep.
+A zero-body or force-submission failure invalidates the run rather than silently
+continuing without wind. Start with `scene.num_envs: 1` for server validation.

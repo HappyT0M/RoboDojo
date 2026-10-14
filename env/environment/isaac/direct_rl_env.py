@@ -8,6 +8,9 @@ class CustomDirectRLEnv(DirectRLEnv):
         for _ in range(self.cfg.decimation):
             self._sim_step_counter += 1
             self.scene.write_data_to_sim()
+            before_step = (getattr(self, "func", None) or {}).get("_before_physics_step")
+            if before_step is not None:
+                before_step()
             self.sim.step(render=False)
             if (
                 self.cfg.sim.render_interval > 0

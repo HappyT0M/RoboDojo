@@ -65,7 +65,7 @@ parser.add_argument(
     nargs=3,
     default=None,
     metavar=("WX", "WY", "WZ"),
-    help="constant wind vector for cloth particle systems; omitted means no wind",
+    help="constant world-space wind velocity for task cloth and rigid bodies (m/s); omitted means no wind",
 )
 
 AppLauncher.add_app_launcher_args(parser)
@@ -144,7 +144,8 @@ from src.eval_client.eval_env import create_eval_env
 from utils.cluttered_generator import UnStableError
 from utils.load_file import load_yaml
 from utils.pipeline_utils import *
-from utils.cloth_wind import apply_constant_cloth_wind
+from utils.cloth_wind import apply_constant_cloth_wind_if_present
+from utils.eval_wind import EvalWindError
 
 BENCHMARK_PATH = os.path.join(ROOT_DIR, "task", BENCHMARK)
 
@@ -317,8 +318,13 @@ def main():
             "deploy_cfg": deploy_cfg,
         }
     )
-    wind = apply_constant_cloth_wind(env_cfg.task_env, args_cli.wind)
-    print(f"[main] cloth wind={wind} (m/s)")
+    wind = apply_constant_cloth_wind_if_present(env_cfg.task_env, args_cli.wind)
+    OmegaConf.update(env_cfg, "eval_cfg.wind", wind, force_add=True)
+    OmegaConf.update(
+        env_cfg, "eval_cfg.rigid_force_scale",
+        float(os.environ.get("ROBODOJO_RIGID_FORCE_SCALE", "1.0")), force_add=True,
+    )
+    print(f"[main] task wind={wind} (m/s, world coordinates)")
     capped_num_envs = resolve_random_task_num_envs(task_name, num_envs, env_cfg.sim)
     if capped_num_envs != num_envs:
         print(
@@ -384,6 +390,9 @@ def main():
             # Monitor caught the warning in time.
             bad_envs = sorted(e.broken_envs)
 
+        except EvalWindError:
+            # Do not silently consume seeds or report an unperturbed trial.
+            raise
         except UnStableError:
             env.seed_manager.eval_step()
         except Exception as e:

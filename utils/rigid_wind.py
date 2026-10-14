@@ -355,6 +355,12 @@ def create_rigid_wind_controller(
         prepare_contact_sensors=False,
     )
     view.initialize(physics_sim_view=SimulationManager.get_physics_sim_view())
+    # PhysX may reorder prim expressions. Match geometry to the actual view order.
+    by_path = {body.prim_path: body for body in specs}
+    actual_paths = list(view.prim_paths)
+    if len(actual_paths) != len(specs) or set(actual_paths) != set(by_path):
+        raise RuntimeError("Wind rigid view paths do not match the discovered task bodies")
+    specs = [by_path[path] for path in actual_paths]
     physics_device = SimulationManager.get_physics_sim_device()
     return (
         RigidWindController(

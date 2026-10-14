@@ -147,6 +147,7 @@ class BaseEnv(gym.Env):
                     "_setup_scene": self._setup_scene,
                     "_reset_idx": self._reset_idx,
                     "_post_setup_scene": self._post_setup_scene,
+                    "_before_physics_step": self._before_physics_step,
                 },
             )
         except Exception:
@@ -181,6 +182,9 @@ class BaseEnv(gym.Env):
 
         _apply_render_settings(self.sim_cfg.sim.render, render_config, frequency_settings)
         _apply_physx_settings(self.sim_cfg.sim.physx, physx_config)
+
+    def _before_physics_step(self):
+        """Optional task perturbations, applied once per physics substep."""
 
     def sim_step(self, render: bool = True):
         """

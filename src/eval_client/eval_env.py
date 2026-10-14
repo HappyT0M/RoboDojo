@@ -15,6 +15,7 @@ from env.global_configs import BENCHMARK
 from env.observation_manager.obs_manager import ObsManager
 from env.seed_manager.seed_manager import SeedManager
 from utils.cluttered_generator import UnStableError
+from utils.eval_wind import EvalWind
 from utils.cloth_wind import apply_cloth_runtime_overrides
 from utils.pipeline_utils import get_robot_action_dim_info
 from utils.save_file import VideoStreamWriter, format_video_saved_message, save_json
@@ -176,6 +177,10 @@ def create_eval_env(config, app, resume_state=None, **kwargs):
                 abandoned_layout_ids=abandoned_layout_ids,
             )
 
+            self.eval_wind = EvalWind(
+                self.eval_cfg.get("wind", [0.0, 0.0, 0.0]),
+                force_scale=self.eval_cfg.get("rigid_force_scale", 1.0),
+            )
             self.deploy_cfg = config.deploy_cfg
             self.port = self.deploy_cfg.get("port", None)
             if self.port is None:
@@ -199,6 +204,8 @@ def create_eval_env(config, app, resume_state=None, **kwargs):
             self.robot_action_dim_info = get_robot_action_dim_info(env_cfg=self.eval_cfg)
 
         def close(self):
+            if hasattr(self, "eval_wind"):
+                self.eval_wind.stop()
             self._abort_video_writers()
             self.obs_manager.reset()
             super().close()
@@ -207,7 +214,12 @@ def create_eval_env(config, app, resume_state=None, **kwargs):
             super()._post_setup_scene(sim)
             self.obs_manager.initialize(self)
 
+        def _before_physics_step(self):
+            if hasattr(self, "eval_wind"):
+                self.eval_wind.step()
+
         def reset(self, seed=None, options=None):
+            self.eval_wind.stop()
             seed = list(seed)
             if len(seed) < self.num_envs:
                 seed = seed + [None] * (self.num_envs - len(seed))
@@ -247,6 +259,11 @@ def create_eval_env(config, app, resume_state=None, **kwargs):
             self.reward_manager.init_state()
 
             self.model_client.call(func_name="reset")
+            self.eval_wind.start(self.scene_manager)
+            self._save_wind_metadata()
+
+        def _save_wind_metadata(self):
+            save_json(self.eval_wind.metadata(), os.path.join(self.save_dir, "_wind.json"))
 
         def setup_scene(self):
             self.scene_manager.apply_saved_poses(env_idx_list=list(range(self.num_envs)))
@@ -833,6 +850,8 @@ def create_eval_env(config, app, resume_state=None, **kwargs):
                 self.eval_result["success_rate"] = self.success_nums / eval_time
                 self.eval_result["score"] = self.total_score / eval_time * 100
             self.eval_result["eval_time"] = eval_time
+            self.eval_result["wind"] = self.eval_wind.metadata()
+            self._save_wind_metadata()
             save_json(self.eval_result, os.path.join(self.save_dir, "_result.json"))
             # Refresh the resume manifest at the end of every batch so that a
             # downstream SIGABRT (which beats the in-process PhysXFatalError
