@@ -61,6 +61,15 @@ class EvalWind:
             if self.step_count == 1:
                 diagnostics = self.controller.last_diagnostics
                 print(f"[wind] first physics step: applied={diagnostics['applied_body_count']} bodies", flush=True)
+            elif self.step_count % 1000 == 0:
+                diagnostics = self.controller.last_diagnostics
+                max_force = max(
+                    (body['force_norm_n'] for body in diagnostics.get('bodies', [])),
+                    default=0.0,
+                )
+                print(f"[wind] physics_step={self.step_count}, velocity={self.wind} m/s, "
+                      f"applied={diagnostics['applied_body_count']} bodies, "
+                      f"max_force={max_force:.6g} N", flush=True)
 
     def metadata(self):
         return {

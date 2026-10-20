@@ -11,6 +11,7 @@ from utils.rope_task_metrics import (
     ConsecutiveSuccess,
     ball_in_directed_far_zone,
     crosses_ring_aperture,
+    crosses_frame_aperture,
     gripper_holds_rope,
     point_inside_oriented_box,
     polyline_wraps_post,
@@ -92,19 +93,25 @@ class Func_Parser:
 
         elif kind == "ring":
             ring_name = self.layout_manager.get_instance_name(env_idx=env_idx, label="ring")
-            ring_pos, _ = self.layout_manager.get_instance_pose(env_idx=env_idx, inst_name=ring_name)
+            ring_pos, ring_quat = self.layout_manager.get_instance_pose(env_idx=env_idx, inst_name=ring_name)
             ring_pos = np.asarray(ring_pos, dtype=float).reshape(3)
             normal = np.asarray(config.get("ring_normal", [0.0, 1.0, 0.0]), dtype=float)
             normal /= np.linalg.norm(normal)
             previous = state.get("previous_ball_position")
-            if previous is not None and crosses_ring_aperture(
-                previous,
-                ball_position,
-                ring_pos,
-                normal,
-                float(config.get("ring_inner_radius", 0.096)),
-                float(config.get("ring_margin", 0.018)),
-            ):
+            crossed = False
+            if previous is not None:
+                if "aperture_half_extents" in config:
+                    crossed = crosses_frame_aperture(
+                        previous, ball_position, ring_pos, ring_quat,
+                        config["aperture_half_extents"], float(config["aperture_margin"]),
+                    )
+                else:
+                    crossed = crosses_ring_aperture(
+                        previous, ball_position, ring_pos, normal,
+                        float(config.get("ring_inner_radius", 0.096)),
+                        float(config.get("ring_margin", 0.018)),
+                    )
+            if crossed:
                 state["crossed_ring"] = True
             state["previous_ball_position"] = ball_position.copy()
             condition = state.get("crossed_ring", False) and ball_in_directed_far_zone(

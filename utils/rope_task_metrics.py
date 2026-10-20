@@ -82,6 +82,25 @@ def crosses_ring_aperture(
     return math.sqrt(_dot(radial, radial)) <= inner_radius - margin
 
 
+def crosses_frame_aperture(previous, current, center, quaternion_wxyz, half_extents, margin):
+    """Cross from local +Z to -Z through a rectangular opening (scaled metres).
+
+    Require both sampled endpoints inside the inset rectangle. This is stricter
+    than a centre-plane-only test and avoids accepting a path around a frame edge.
+    """
+    if len(half_extents) != 2 or margin < 0 or min(half_extents) <= margin:
+        raise ValueError("Require two positive aperture half extents larger than margin")
+    w, x, y, z = quaternion_wxyz
+    local = [
+        _rotate_by_quaternion(tuple(a - b for a, b in zip(point, center)), (w, -x, -y, -z))
+        for point in (previous, current)
+    ]
+    return (local[0][2] > 0 >= local[1][2] and all(
+        abs(point[axis]) <= half_extents[axis] - margin
+        for point in local for axis in (0, 1)
+    ))
+
+
 def ball_in_directed_far_zone(
     position: Sequence[float],
     center: Sequence[float],

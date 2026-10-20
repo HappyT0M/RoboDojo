@@ -15,9 +15,15 @@ Geometry:
   - common:
       relative_plane: "Table"
       rotate_rand: false
-      qpos: [1, 0, 0, 0]
+      qpos: [0.7071067811865476, 0.7071067811865476, 0, 0]
+      scale: [1.5, 3.0, 50.0]
+      physics:
+        collision: true
+        mesh_collision_approximation: "none"
+      visual:
+        color: [0.95, 0.45, 0.08]
     category:
-      - name: "rope_ring"
+      - name: "frame"
         index: [0]
     select_mode:
       nums: 1
@@ -29,9 +35,9 @@ RopeTask:
   link_count: 12
   ball_link: "ball"
   ring_normal: [0.0, 1.0, 0.0]
-  ring_inner_radius: 0.096
-  ring_margin: 0.018
-  target_distance_after_ring: 0.10
+  aperture_half_extents: [0.1755, 0.141]
+  aperture_margin: 0.024
+  target_distance_after_ring: 0.04
   target_distance_max: 0.22
-  ring_target_radius: 0.08
+  ring_target_radius: 0.13
   stable_steps: 20

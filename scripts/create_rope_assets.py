@@ -358,6 +358,37 @@ def _write_layout(task_name, objects):
     (LAYOUTS / f"{task_name}_0.json").write_text(json.dumps(_layout(objects), indent=2), encoding="utf-8")
 
 
+def frame_target_entry():
+    """Reuse the stock hollow frame: 35.1 x 28.2 cm opening, 1.5 cm depth."""
+    entry = _entry(
+        "frame", "ring", [-0.15, 0.15, 0.915],
+        (math.sqrt(0.5), math.sqrt(0.5), 0, 0),
+        scale=(1.5, 3.0, 50.0),
+    )
+    entry["physics"]["mesh_collision_approximation"] = "none"
+    entry["visual"]["color"] = [0.95, 0.45, 0.08]
+    return entry
+
+
+def update_ring_layout():
+    """Update only the ring task; preserve other tasks and custom layout fields."""
+    asset = ASSETS / "Geometry" / "frame" / "00000" / "object.usdz"
+    if not asset.is_file():
+        raise FileNotFoundError(f"Missing stock frame asset: {asset}")
+    path = LAYOUTS / "pass_rope_through_ring_0.json"
+    if not path.exists():
+        raise FileNotFoundError(f"Generate initial layouts first: {path}")
+    layout = json.loads(path.read_text(encoding="utf-8"))
+    geometry = layout.setdefault("Geometry", {})
+    for category in list(geometry):
+        geometry[category] = [item for item in geometry[category] if item.get("label") != "ring"]
+        if not geometry[category]:
+            del geometry[category]
+    geometry.setdefault("frame", []).append(frame_target_entry())
+    path.write_text(json.dumps(layout, indent=2), encoding="utf-8")
+    print(f"Updated frame target: {path}")
+
+
 def generate_assets():
     _write_rope_asset()
     ring, ring_faces = _ring_mesh()
@@ -384,7 +415,7 @@ def generate_assets():
                     _entry("rope_chain", "rope", [-0.15, -0.50, 0.79], (math.sqrt(0.5), 0, 0, math.sqrt(0.5)), "articulation")
                 ]
             },
-            "Geometry": {"rope_ring": [_entry("rope_ring", "ring", [-0.15, 0.15, 0.87])]},
+            "Geometry": {"frame": [frame_target_entry()]},
         },
     )
     _write_layout(
@@ -404,4 +435,11 @@ def generate_assets():
 
 
 if __name__ == "__main__":
-    generate_assets()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--update-ring-layout", action="store_true")
+    args = parser.parse_args()
+    if args.update_ring_layout:
+        update_ring_layout()
+    else:
+        generate_assets()

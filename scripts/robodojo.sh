@@ -222,6 +222,40 @@ EOF
   echo "[robodojo eval] wall_clock=${elapsed_sec}s"
 }
 
+run_eval_logged() (
+  # A new invocation gets a fresh ID; internal recovery inherits this same ID.
+  local arg
+  for arg in "$@"; do
+    case "${arg}" in
+      --help|-h|--dry-run) run_eval "$@"; return ;;
+    esac
+  done
+  export TZ=Asia/Shanghai
+  local stamp log_file statuses
+  stamp="$(date +%Y-%m-%d_%H-%M-%S)"
+  mkdir -p "${ROOT_DIR}/logs"
+  log_file="$(mktemp "${ROOT_DIR}/logs/eval_${stamp}_XXXXXX")"
+  export ROBODOJO_RUN_ID="${log_file##*/eval_}"
+  mv "${log_file}" "${log_file}.log"
+  log_file="${log_file}.log"
+  export PYTHONUNBUFFERED=1
+  set +e
+  (
+    set -e
+    echo "[robodojo eval] log_file=${log_file}"
+    echo "[robodojo eval] run_id=${ROBODOJO_RUN_ID} timezone=Asia/Shanghai (UTC+08:00)"
+    printf '[robodojo eval] command: bash scripts/robodojo.sh eval'
+    printf ' %q' "$@"
+    printf '\n'
+    run_eval "$@"
+  ) 2>&1 | tee "${log_file}"
+  statuses=("${PIPESTATUS[@]}")
+  if [[ "${statuses[0]}" -ne 0 ]]; then
+    exit "${statuses[0]}"
+  fi
+  exit "${statuses[1]}"
+)
+
 run_server() {
   local dataset="RoboDojo"
   local task=""
@@ -609,7 +643,7 @@ case "${command}" in
   doctor) run_doctor "$@" ;;
   tasks) run_tasks "$@" ;;
   dimensions) run_dimensions "$@" ;;
-  eval) run_eval "$@" ;;
+  eval) run_eval_logged "$@" ;;
   server) run_server "$@" ;;
   client) run_client "$@" ;;
   smoke) run_sweep smoke "$@" ;;

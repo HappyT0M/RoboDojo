@@ -158,3 +158,39 @@ forces. Completed `_result.json` also includes this under `wind`. Diagnostics
 are saved after reset and after each completed batch, not on every substep.
 A zero-body or force-submission failure invalidates the run rather than silently
 continuing without wind. Start with `scene.num_envs: 1` for server validation.
+# Evaluation logs and timestamps
+
+`bash scripts/robodojo.sh eval ...` automatically streams stdout and stderr to
+`logs/eval_YYYY-MM-DD_HH-MM-SS_<unique>.log` while displaying them in the terminal.
+Each invocation creates a new log and run ID using Beijing time (`Asia/Shanghai`,
+UTC+08:00); the result directory uses the same run ID. Internal recovery keeps
+that ID. The unique suffix prevents concurrent runs from overwriting each other.
+Do not append an old `| tee "$LOG_FILE"` command: automatic logging replaces it.
+The log header records the exact arguments, run ID, and timezone. `--help` and
+`--dry-run` do not create logs. Native engine timestamps ending in `Z` remain UTC.
+
+Wind evaluation logs report application counts and maximum submitted force every
+1000 physics steps. `_wind.json` records the final count and per-body forces.
+Constant wind means constant air velocity; drag varies with body velocity and
+orientation, and visible motion can stop under contact constraints.
+
+### Stock-frame version of the rope crossing task
+
+`pass_rope_through_ring` now uses the existing `Geometry/frame/00000/object.usdz`
+asset as a fixed, orange rectangular frame. Its opening is 35.1 × 28.2 cm,
+with 1.5 cm depth. It stands on the table facing the +Y crossing direction.
+The ball must cross within the rectangle with 2.4 cm clearance from its edges,
+then stay 4–22 cm beyond the plane and within 13 cm of its axis for 20 reward
+checks. This is a new task variant; do not pool results with the old ring variant.
+
+After syncing code to a server, update its ignored seed layout once:
+
+```bash
+python scripts/create_rope_assets.py --update-ring-layout
+```
+
+This updates only the ring-labelled target in `pass_rope_through_ring_0.json`;
+it does not regenerate the rope or change the basket/posts layouts. The stock
+frame asset must already exist. Run the same evaluation command and task name.
+Verify the frame is visible and the opening is traversable in Isaac Sim before
+collecting comparison results; local geometry tests do not validate PhysX contact.

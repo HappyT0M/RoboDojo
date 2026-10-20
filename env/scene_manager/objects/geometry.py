@@ -102,6 +102,18 @@ class GeometryObject(SingleGeometryPrim):
             contact_filter_prim_paths_expr=contact_filter_prim_paths_expr,
         )
         self._remove_rigid_body_if_exists(prim_path)
+        # Stock thin frames may have only a visual mesh. Explicit triangle
+        # colliders preserve their opening; a convex hull would fill it in.
+        approximation = self.physics_config.get("mesh_collision_approximation")
+        if approximation is not None:
+            if approximation != "none":
+                raise ValueError("Static mesh_collision_approximation currently supports only 'none'")
+            for child in Usd.PrimRange(self.prim):
+                if child.IsA(UsdGeom.Mesh):
+                    UsdPhysics.CollisionAPI.Apply(child).CreateCollisionEnabledAttr().Set(collision)
+                    UsdPhysics.MeshCollisionAPI.Apply(child).CreateApproximationAttr().Set(approximation)
+
+        self.color_material_path = None
         self._current_color = self.visual_config.get("color", None)
         if self._current_color is not None:
             self._apply_color_material(self._current_color)
