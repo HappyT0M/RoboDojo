@@ -201,3 +201,32 @@ class ConsecutiveSuccess:
 def resolve_physx_gpu_override(sim_config) -> int:
     """Map the optional task setting to PhysX's CPU/GPU override value."""
     return 0 if sim_config.get("gpu_dynamics_enabled", True) is False else 1
+
+
+def update_obstacle_route(state, ball, obstacle, grasped, *, side_x_bounds, z_bounds, near_distance):
+    """Latch an observed near-to-far crossing on +X after a rope grasp.
+
+    Coordinates use environment axes: +Y is away from the robot and +X is
+    the instructed right side. No reward is inferred from endpoint alone.
+    """
+    point = _vec3(ball)
+    if not all(math.isfinite(v) for v in point):
+        raise ValueError("Non-finite ball position in route evaluator")
+    if grasped:
+        state['grasped_rope'] = True
+    if not state.get('grasped_rope', False):
+        return False
+    y = point[1] - obstacle[1]
+    if y <= -near_distance:
+        state['seen_near'] = True
+    previous = state.get('route_previous')
+    if previous is not None and state.get('seen_near', False):
+        old_y = previous[1] - obstacle[1]
+        if old_y < 0 <= y:
+            alpha = -old_y / (y - old_y)
+            crossing_x = previous[0] + alpha * (point[0] - previous[0]) - obstacle[0]
+            if (side_x_bounds[0] <= crossing_x <= side_x_bounds[1]
+                    and all(z_bounds[0] <= p[2] <= z_bounds[1] for p in (previous, point))):
+                state['routed_obstacle'] = True
+    state['route_previous'] = point
+    return state.get('routed_obstacle', False)

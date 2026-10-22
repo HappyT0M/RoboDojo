@@ -34,7 +34,7 @@ RopeTask:
   kind: "ring"
   link_count: 12
   ball_link: "ball"
-  ring_normal: [0.0, 1.0, 0.0]
+  ring_normal: [-0.70710678, 0.70710678, 0.0]
   aperture_half_extents: [0.1755, 0.141]
   aperture_margin: 0.024
   target_distance_after_ring: 0.04

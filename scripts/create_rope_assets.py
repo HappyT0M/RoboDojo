@@ -389,6 +389,32 @@ def update_ring_layout():
     print(f"Updated frame target: {path}")
 
 
+def single_obstacle_objects():
+    """Native fixed vase and mat; ball starts on the near (-Y) side."""
+    return {
+        "Articulation": {"rope_chain": [_entry(
+            "rope_chain", "rope", [-0.594, -0.20, 0.79], object_type="articulation"
+        )]},
+        "Geometry": {
+            "vase": [_entry("vase", "obstacle", [0.0, 0.0, 0.84053], category_idx=3)],
+            "mousemat": [_entry("mousemat", "target", [0.0, 0.24, 0.76865])],
+        },
+    }
+
+
+def update_posts_layout():
+    for category, index in (("vase", 3), ("mousemat", 0)):
+        asset = ASSETS / "Geometry" / category / f"{index:05d}" / "object.usdz"
+        if not asset.is_file():
+            raise FileNotFoundError(f"Missing native asset: {asset}")
+    path = LAYOUTS / "route_rope_around_posts_0.json"
+    layout = json.loads(path.read_text(encoding="utf-8")) if path.exists() else _layout({})
+    layout.update(single_obstacle_objects())
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(layout, indent=2), encoding="utf-8")
+    print(f"Updated single-obstacle task layout: {path}")
+
+
 def generate_assets():
     _write_rope_asset()
     ring, ring_faces = _ring_mesh()
@@ -418,28 +444,20 @@ def generate_assets():
             "Geometry": {"frame": [frame_target_entry()]},
         },
     )
-    _write_layout(
-        "route_rope_around_posts",
-        {
-            "Articulation": {"rope_chain": [_entry("rope_chain", "rope", [-0.34, -0.18, 0.79], object_type="articulation")]},
-            "Geometry": {
-                "rope_post": [
-                    _entry("rope_post", "post0", [-0.15, -0.10, 0.765]),
-                    _entry("rope_post", "post1", [0.06, -0.10, 0.765]),
-                ],
-                "rope_slot": [_entry("rope_slot", "target_slot", [0.30, 0.15, 0.765])],
-            },
-        },
-    )
+    _write_layout("route_rope_around_posts", single_obstacle_objects())
     print("Generated CPU rope chain, three fixtures, metadata, and three seed-0 layouts.")
 
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--update-ring-layout", action="store_true")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--update-ring-layout", action="store_true")
+    modes.add_argument("--update-posts-layout", action="store_true")
     args = parser.parse_args()
     if args.update_ring_layout:
         update_ring_layout()
+    elif args.update_posts_layout:
+        update_posts_layout()
     else:
         generate_assets()

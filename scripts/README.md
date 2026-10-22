@@ -194,3 +194,30 @@ it does not regenerate the rope or change the basket/posts layouts. The stock
 frame asset must already exist. Run the same evaluation command and task name.
 Verify the frame is visible and the opening is traversable in Isaac Sim before
 collecting comparison results; local geometry tests do not validate PhysX contact.
+
+### Task three: native single-obstacle routing (variant A)
+
+`route_rope_around_posts` now uses `Geometry/vase/00003` as a static obstacle
+and `Geometry/mousemat/00000` as a static destination marker. The task name is
+retained for command compatibility; its semantics differ from the old two-post
+wrapping task. Keep results separate (`native_vase_route_v1`).
+
+After syncing code, update this task's ignored seed layout on the server:
+
+```bash
+python scripts/create_rope_assets.py --update-posts-layout
+```
+
+This replaces the task's Articulation and Geometry layout sections, preserving
+room/table settings and leaving other task layouts unchanged. The stock vase
+and mousemat assets must be installed. No generated post/slot assets are used.
+
+The rope ball starts at approximately (0, -0.20, 0.79). The vase is centered at
+(0, 0, 0.84053), standing on the 0.765 m tabletop; the mat is at (0, 0.24, 0.76865).
+After a detected rope grasp, the evaluator requires a near-to-far crossing of
+Y=0 on the +X side (7.5–20 cm from the vase axis), with ball height 0.779–0.87 m.
+The ball must then remain within the mat's inset goal region for 20 reward checks.
+It need not wrap tightly around the vase or maintain a grasp at the destination.
+The waypoint rules use environment axes; moving/rotating the task requires
+reviewing these bounds. Start with a no-wind demo to validate visuals, contacts,
+and reachability in Isaac Sim before collecting wind comparisons.
