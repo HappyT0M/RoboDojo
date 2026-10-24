@@ -43,6 +43,8 @@ Examples:
 
 The selected policy is downloaded to:
   XPolicyLab/policy/<POLICY>/checkpoints
+Set ROBO_DOJO_CKPT_OUTPUT_ROOT to expose checkpoints at <root>/<POLICY> instead.
+These paths are symlinks into ROBO_DOJO_CKPT_CACHE; keep that cache directory.
 EOF
 }
 
@@ -231,6 +233,10 @@ download_ckpt() {
   local_policy="$(resolve_local_policy "${remote_policy}")"
   remote_dir="${REMOTE_CKPT_ROOT}/${remote_policy}"
   target_dir="${POLICY_ROOT}/${local_policy}/checkpoints"
+  if [[ -n "${ROBO_DOJO_CKPT_OUTPUT_ROOT:-}" ]]; then
+    mkdir -p "${ROBO_DOJO_CKPT_OUTPUT_ROOT}"
+    target_dir="${ROBO_DOJO_CKPT_OUTPUT_ROOT}/${local_policy}"
+  fi
 
   info "Matched policy: input='${POLICY_INPUT}', local='${local_policy}', remote='${remote_policy}'"
   info "Pulling only ${remote_dir}/** LFS objects..."

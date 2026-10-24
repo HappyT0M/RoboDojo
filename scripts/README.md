@@ -221,3 +221,42 @@ It need not wrap tightly around the vase or maintain a grasp at the destination.
 The waypoint rules use environment axes; moving/rotating the task requires
 reviewing these bounds. Start with a no-wind demo to validate visuals, contacts,
 and reachability in Isaac Sim before collecting wind comparisons.
+
+### Download RoboDojo evaluation checkpoints to one root
+
+`scripts/download_vla_weights.py` calls the existing
+`scripts/RoboDojo/download_ckpt.sh` for each selected model. It uses the same
+RoboDojo dataset, remote checkpoint directories, policy aliases, and Git LFS
+transfer logic. It never substitutes model-author base weights.
+
+Edit `DEFAULT_ROOT` / `DEFAULT_MODELS` in the Python script, set `VLA_CKPT_ROOT`,
+or pass `--root` / `--models`. The default root is `/data/xiebingsheng/ckpt`.
+Defaults request DreamZero, Pi_0 and LingBot_VLA; this is a requested selection,
+not a guarantee that all three are published in the RoboDojo dataset. The
+existing downloader checks remote availability and installed policy adapters.
+Missing models fail explicitly; other selected models continue. The batch exits
+nonzero if any model fails. A dry run only previews requests, without validating
+remote availability.
+
+Requirements: Python 3, Bash 4+, git and git-lfs, and installed XPolicyLab policy
+adapters. No GPU, huggingface_hub or Google Cloud CLI is required.
+
+```bash
+python scripts/download_vla_weights.py --dry-run
+python scripts/download_vla_weights.py --root /data/xiebingsheng/ckpt
+python scripts/download_vla_weights.py --models Pi_0 Pi_05 --root /data/xiebingsheng/ckpt
+python scripts/download_vla_weights.py --source modelscope --root /root/autodl-tmp/ckpt
+```
+
+Files are stored in `<root>/.cache/robodojo_ckpt_<source>_repo`; model paths such
+as `<root>/Pi_0` are symlinks into that cache, retaining the official checkpoint
+subdirectory structure. Keep the cache when copying or moving downloads.
+Existing target paths are archived as `.partial.<timestamp>` by the original
+downloader before replacing them with symlinks. Reruns reuse the Git LFS cache.
+This wrapper does not update `XPolicyLab/policy/<POLICY>/checkpoints` links; point
+your evaluation setup at the downloaded directory separately.
+
+The original downloader still defaults to its original output location when
+`ROBO_DOJO_CKPT_OUTPUT_ROOT` is not set. Its repository/revision environment
+variables remain supported. This replaces the previous base-weight downloader;
+`--all`, `--list`, and `--workers` from that version are no longer supported.
