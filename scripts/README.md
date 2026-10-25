@@ -57,6 +57,10 @@ action steps per layout. Use `--steps` or `--duration_s` to choose the length.
 is `0 0 0`. Video preview enables only RGB camera capture by default to reduce
 GPU memory use. Add `--xlens_snapshot` if instance masks and XLens scene
 snapshots are needed.
+CPU rope tasks launch a fresh Isaac Sim process for each layout, sequentially,
+because their articulation objects are retained across in-process resets.
+The single command and Beijing-time log cover the whole sequence. Failed
+layouts are reported in the log while later layouts still run.
 
 ```bash
 python scripts/record_deformable_tasks.py \
