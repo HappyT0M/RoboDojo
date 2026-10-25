@@ -183,6 +183,7 @@ class CameraManager:
                 default_frequency = config.pop("default_frequency")
             if "annotator" in config:
                 config.pop("annotator")
+            config.pop("capture_cuda_device", None)
             random_config = config.pop("random", {})
             self.random_config = OmegaConf.create(random_config)
 

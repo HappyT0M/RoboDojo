@@ -15,6 +15,7 @@
     # 以恒定 +Y 风速录制任务的所有布局，每个布局 10 秒（风速单位 m/s）
     python scripts/record_deformable_tasks.py \
         --task_name put_rope_ball_in_basket \
+        --device_id 3 \
         --duration_s 10 --wind 0 0.5 0 \
         --rigid_force_scale 100 --out_dir eval_result/preview
 
@@ -27,8 +28,11 @@
     * 默认依次录制指定任务的全部已有布局；``--layout_id`` 可只录制一个布局。
       ``--seed`` 选择 Eval_Layout 下的目录，不是布局编号。
     * 每个 episode 机械臂保持初始位姿、夹爪保持张开，仅推进物理仿真并采集摄像头画面。
+      默认只启用 RGB 采集；需要实例分割和 XLens 场景快照时传入 ``--xlens_snapshot``。
     * ``--wind WX WY WZ`` 设置世界坐标中的恒定风速；默认 0 0 0。布料使用粒子风速，
       可移动刚体及任务关节链 link 使用简化空气阻力；不修改任务 YAML。
+    * 标准输出、错误输出和 Isaac Sim 原生日志均加北京时间前缀，追加到
+      ``<仓库根目录>/logs/record_deformable_tasks.log``。
 """
 
 from __future__ import annotations
@@ -41,6 +45,7 @@ import math
 import os
 from pathlib import Path
 import sys
+from zoneinfo import ZoneInfo
 
 # 将项目根目录加入 sys.path，确保无论从哪个目录运行都能导入 env/task/utils/src 等包。
 # 官方入口（scripts/robodojo.sh）从项目根目录启动 Python，本脚本需自行兜底。
@@ -50,7 +55,22 @@ for _import_root in (_PROJECT_ROOT, _XPOLICYLAB_ROOT):
     if _import_root not in sys.path:
         sys.path.insert(0, _import_root)
 
+# Keep the log supervisor outside Isaac Sim so native crashes and startup
+# diagnostics still reach the fixed log file. The child runs this same script.
+if __name__ == "__main__" and os.environ.get("ROBODOJO_PREVIEW_RECORD_WORKER") != "1":
+    from utils.preview_run_log import run_with_beijing_log
+
+    raise SystemExit(
+        run_with_beijing_log(
+            __file__, sys.argv[1:],
+            os.path.join(_PROJECT_ROOT, "logs", "record_deformable_tasks.log"),
+        )
+    )
+
 from isaaclab.app import AppLauncher
+
+
+BEIJING_TIME = ZoneInfo("Asia/Shanghai")
 
 
 def _nonnegative_finite_float(value: str) -> float:
@@ -84,7 +104,7 @@ parser.add_argument(
 )
 parser.add_argument("--num_envs", type=int, default=1, help="并行环境数；逐布局录制要求为 1")
 parser.add_argument("--env_cfg_type", type=str, default="arx_x5", help="eval 配置文件名（env_cfg 目录下，不含 .yml）")
-parser.add_argument("--device_id", type=int, default=0, help="当前进程可见的 GPU 序号")
+parser.add_argument("--device_id", type=int, default=None, help="运行所用 GPU 编号；等价于 --device cuda:N，默认 0")
 parser.add_argument("--seed", type=int, default=0, help="布局目录编号，例如 Assets/Eval_Layout/.../0")
 parser.add_argument("--layout_id", type=int, default=None, help="只录制指定布局文件的编号；默认录制全部")
 duration_group = parser.add_mutually_exclusive_group()
@@ -109,7 +129,7 @@ parser.add_argument(
     "--xlens_snapshot_dir",
     type=str,
     default="logs/xlens_geometry",
-    help="XLens 场景快照输出根目录；默认在每次 reset 后自动导出",
+    help="启用 --xlens_snapshot 后的 XLens 场景快照输出根目录",
 )
 parser.add_argument(
     "--xlens_min_mask_pixels",
@@ -117,10 +137,14 @@ parser.add_argument(
     default=50,
     help="自动加入 scene.json 的实例至少需要覆盖的像素数",
 )
-parser.add_argument(
-    "--disable_xlens_snapshot",
-    action="store_true",
-    help="关闭 reset 后的 XLens 场景快照导出",
+snapshot_group = parser.add_mutually_exclusive_group()
+snapshot_group.add_argument(
+    "--xlens_snapshot", action="store_true",
+    help="启用实例分割，并在每次 reset 后导出 XLens 场景快照；默认仅录 RGB 视频",
+)
+snapshot_group.add_argument(
+    "--disable_xlens_snapshot", action="store_true",
+    help="兼容旧命令：不导出 XLens 快照，默认行为已是关闭",
 )
 
 AppLauncher.add_app_launcher_args(parser)
@@ -132,14 +156,39 @@ if args_cli.num_envs != 1:
 if args_cli.layout_id is not None and args_cli.layout_id < 0:
     parser.error("--layout_id must be a non-negative integer")
 
-# Do not rewrite CUDA_VISIBLE_DEVICES here. Isaac Sim/Omniverse has its own GPU
-# enumeration and warns that masking CUDA devices can break Vulkan/PhysX device
-# discovery. Select the already-visible device directly instead.
+# Do not rewrite CUDA_VISIBLE_DEVICES: masking can make CUDA and Vulkan device
+# indices disagree. Set the simulation and renderer devices explicitly.
+device_arg_explicit = any(arg == "--device" or arg.startswith("--device=") for arg in sys.argv[1:])
 if args_cli.device_id is not None:
     if args_cli.device_id < 0:
         parser.error("--device_id must be a non-negative integer")
-    args_cli.device = f"cuda:{args_cli.device_id}"
-print(f"[record] Isaac Sim device={args_cli.device}")
+    selected_device = f"cuda:{args_cli.device_id}"
+    if device_arg_explicit:
+        explicit_device = "cuda:0" if args_cli.device == "cuda" else args_cli.device
+        if explicit_device != selected_device:
+            parser.error("--device_id and --device refer to different GPUs")
+    args_cli.device = selected_device
+else:
+    selected_device = args_cli.device or "cuda:0"
+    if selected_device == "cuda":
+        selected_device = "cuda:0"
+    if not selected_device.startswith("cuda:") or not selected_device[5:].isdigit():
+        parser.error("录制需要 GPU；请使用 --device_id N 或 --device cuda:N")
+    args_cli.device_id = int(selected_device[5:])
+    args_cli.device = selected_device
+args_cli.enable_cameras = True
+# AppLauncher.device selects the simulation device; select Kit's renderer too.
+# Keep multi-GPU rendering off so one recording stays on the requested card.
+renderer_args = (
+    f"--/renderer/activeGpu={args_cli.device_id} "
+    "--/renderer/multiGpu/enabled=false"
+)
+args_cli.kit_args = " ".join(part for part in (args_cli.kit_args, renderer_args) if part)
+print(
+    f"[record] Isaac Sim device={args_cli.device} GPU={args_cli.device_id} "
+    f"CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES', '<unset>')} "
+    f"kit_args={args_cli.kit_args}"
+)
 
 # 在 AppLauncher 之前安全导入（env 为 namespace package，global_configs 仅依赖 os）
 from env.global_configs import BENCHMARK, ROOT_DIR  # noqa: E402
@@ -238,7 +287,7 @@ def _log_wind_readback(
         else {"body_count": 0, "applied_body_count": 0, "bodies": []}
     )
     record = {
-        "timestamp": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "timestamp": datetime.now(BEIJING_TIME).isoformat(timespec="seconds"),
         "task_name": task_name,
         "phase": phase,
         "requested_wind": wind,
@@ -325,6 +374,17 @@ def build_env(task_name: str):
     env_cfg = process_randomization(env_cfg)
     env_cfg, eval_num = process_config(env_cfg, task_name=task_name)
     eval_cfg["eval_num"] = eval_num
+
+    camera_cfg = OmegaConf.to_container(env_cfg.camera, resolve=True)
+    camera_cfg["capture_cuda_device"] = args_cli.device
+    if not args_cli.xlens_snapshot:
+        # 视频只保存 RGB。移除预览不需要的分割/depth annotator，避免为每个
+        # 相机创建额外的 RTX render var 和 GPU 缓冲区。
+        for capture_cfg in camera_cfg.get("annotator", {}).values():
+            for capture_name, setting in list(capture_cfg.items()):
+                if capture_name != "enabled" and setting.get("type") != "rgb":
+                    capture_cfg.pop(capture_name)
+    env_cfg.camera = OmegaConf.create(camera_cfg)
 
     OmegaConf.update(
         env_cfg,
@@ -421,7 +481,7 @@ def _record_layout(env, task_name: str, seed_index: int, layout_id: int, record_
                 rigid_wind_controller, rigid_wind_skipped,
             )
 
-        if not args_cli.disable_xlens_snapshot and args_cli.xlens_snapshot_dir:
+        if args_cli.xlens_snapshot and args_cli.xlens_snapshot_dir:
             snapshot_dir = os.path.join(
                 args_cli.xlens_snapshot_dir,
                 f"{task_name}_seed_{args_cli.seed:04d}_layout_{layout_id:03d}",
@@ -487,7 +547,7 @@ def record_task(task_name: str) -> str:
         print(f"[record] 本次录制布局: {[layout_id for _, layout_id in layouts]}")
         if args_cli.layout_id is None and len(layouts) < env.eval_num:
             print(f"[record][WARN] 只有 {len(layouts)} 个布局文件，少于配置的 {env.eval_num} 个")
-        record_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        record_timestamp = datetime.now(BEIJING_TIME).strftime("%Y%m%d_%H%M%S_%f")
         task_output_dir = os.path.join(args_cli.out_dir, task_name)
         os.makedirs(task_output_dir, exist_ok=True)
         failed_layouts = []

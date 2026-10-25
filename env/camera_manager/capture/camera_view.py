@@ -146,6 +146,7 @@ class CameraView(XFormPrim):
                          /World/Env1/Camera, /World/Env2/Camera..etc. Additionally a list of regex can be provided.
         camera_resolution: Resolution of each sensor (width, height).
         output_annotators: Annotator/sensor types to configure.
+        annotator_device: CUDA device for Replicator annotator data (for example, "cuda:1").
         name (str, optional): Shortname to be used as a key by Scene class.
                               Note: needs to be unique if the object is added to the Scene.
         positions Default positions in the world frame of the prim. Shape is (N, 3).
@@ -174,6 +175,7 @@ class CameraView(XFormPrim):
         name: str = "camera_prim_view",
         camera_resolution: Tuple[int, int] = (256, 256),
         output_annotators: List[str] | None = ["rgb", "depth"],
+        annotator_device: str = "cuda",
         positions: np.ndarray | torch.Tensor | wp.array | None = None,
         translations: np.ndarray | torch.Tensor | wp.array | None = None,
         orientations: np.ndarray | torch.Tensor | wp.array | None = None,
@@ -193,6 +195,7 @@ class CameraView(XFormPrim):
             reset_xform_properties=reset_xform_properties,
         )
         self._output_annotators = output_annotators
+        self._annotator_device = annotator_device
         self._annotators = dict()
         self.camera_resolution = camera_resolution
         self._tiled_render_product = None
@@ -246,15 +249,15 @@ class CameraView(XFormPrim):
             # get annotator
             if annotator_type == "rgba" or annotator_type == "rgb":
                 self._annotators["rgba"] = rep.AnnotatorRegistry.get_annotator(
-                    "rgb", device="cuda", do_array_copy=False
+                    "rgb", device=self._annotator_device, do_array_copy=False
                 )
             elif annotator_type == "depth" or annotator_type == "distance_to_image_plane":
                 self._annotators["distance_to_image_plane"] = rep.AnnotatorRegistry.get_annotator(
-                    "distance_to_image_plane", device="cuda", do_array_copy=False
+                    "distance_to_image_plane", device=self._annotator_device, do_array_copy=False
                 )
             else:
                 self._annotators[annotator_type] = rep.AnnotatorRegistry.get_annotator(
-                    annotator_type, device="cuda", do_array_copy=False
+                    annotator_type, device=self._annotator_device, do_array_copy=False
                 )
         # attach the annotator to the render product
         for annotator in self._annotators.values():

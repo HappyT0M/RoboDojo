@@ -54,7 +54,9 @@ selects the layout directory (usually `0`); `--layout_id` selects one layout
 file when a short preview is enough. The script defaults to no wind and 120
 action steps per layout. Use `--steps` or `--duration_s` to choose the length.
 `--wind WX WY WZ` sets constant world-space wind velocity in m/s; the default
-is `0 0 0`.
+is `0 0 0`. Video preview enables only RGB camera capture by default to reduce
+GPU memory use. Add `--xlens_snapshot` if instance masks and XLens scene
+snapshots are needed.
 
 ```bash
 python scripts/record_deformable_tasks.py \
@@ -64,10 +66,22 @@ python scripts/record_deformable_tasks.py \
 
 python scripts/record_deformable_tasks.py \
   --task_name put_rope_ball_in_basket \
-  --seed 0 --duration_s 10 --wind 0 0.5 0 \
+  --seed 0 --device_id 3 --headless --duration_s 10 --wind 0 0.5 0 \
   --rigid_force_scale 100 \
   --out_dir eval_result/preview
 ```
+
+`--device_id N` selects GPU N for Isaac Sim rendering and camera capture;
+`--device cuda:N` is equivalent. The rope task's configured physics device
+remains CPU. The script does not change `CUDA_VISIBLE_DEVICES`; avoid an
+external mask that remaps CUDA indices differently from the physical GPU order
+used by Kit's `activeGpu` setting.
+
+Every run appends stdout, stderr, and native Isaac Sim output to the fixed
+`logs/record_deformable_tasks.log` path under the repository root. Each line
+gets an `Asia/Shanghai` timestamp with a `+08:00` offset; the same log also
+records the command and exit code. Native Kit timestamps ending in `Z` remain
+in the message as originally emitted.
 
 For the rope tasks, generate and verify layouts 0–9 with
 `scripts/generate_rope_eval_layouts.py` before recording. The script prints the
