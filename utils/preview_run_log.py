@@ -1,10 +1,11 @@
-"""Capture a preview worker's Python and native output with Beijing timestamps."""
+"""Save each preview run's unmodified output in a Beijing-time-named log."""
 
 from __future__ import annotations
 
 from datetime import datetime
 import os
 from pathlib import Path
+import re
 import select
 import shlex
 import signal
@@ -18,36 +19,72 @@ BEIJING_TIME = ZoneInfo("Asia/Shanghai")
 WORKER_ENV_VAR = "ROBODOJO_PREVIEW_RECORD_WORKER"
 
 
-def run_with_beijing_log(script_path: str, argv: list[str], log_path: str | Path) -> int:
-    """Run the Isaac worker and append every stdout/stderr line to one fixed log."""
-    log_path = Path(log_path)
-    log_path.parent.mkdir(parents=True, exist_ok=True)
+def _argument_value(argv: list[str], option: str) -> str | None:
+    for index, argument in enumerate(argv):
+        if argument == option:
+            return argv[index + 1] if index + 1 < len(argv) else None
+        if argument.startswith(option + "="):
+            return argument[len(option) + 1:]
+    return None
+
+
+def _task_label(argv: list[str]) -> str:
+    task = _argument_value(argv, "--task_name")
+    if task is None:
+        tasks = _argument_value(argv, "--tasks")
+        if tasks:
+            names = [name.strip() for name in tasks.split(",") if name.strip()]
+            task = names[0] if len(names) == 1 else "multiple_tasks"
+    safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", task or "deformable_tasks").strip("_")
+    return safe_name[:80] or "deformable_tasks"
+
+
+def _open_run_log(log_dir: Path, argv: list[str]):
+    log_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(BEIJING_TIME).strftime("%Y-%m-%dT%H:%M:%S")
+    base_name = f"record_{_task_label(argv)}_{timestamp}"
+    suffix = 1
+    while True:
+        name = f"{base_name}{'' if suffix == 1 else f'_{suffix}'}.log"
+        log_path = log_dir / name
+        try:
+            descriptor = os.open(log_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+            return log_path, os.fdopen(descriptor, "wb", buffering=0)
+        except FileExistsError:
+            suffix += 1
+
+
+def _write_all(descriptor: int, data: bytes) -> None:
+    remaining = memoryview(data)
+    while remaining:
+        remaining = remaining[os.write(descriptor, remaining):]
+
+
+def run_with_timestamped_log(script_path: str, argv: list[str], log_dir: str | Path) -> int:
+    """Run the Isaac worker and stream its stdout/stderr to a separate log."""
     command = [sys.executable, script_path, *argv]
     worker_env = os.environ.copy()
     worker_env[WORKER_ENV_VAR] = "1"
     worker_env["PYTHONUNBUFFERED"] = "1"
+    log_path, log_file = _open_run_log(Path(log_dir), argv)
 
-    with log_path.open("ab", buffering=0) as log_file:
-        run_id = f"{datetime.now(BEIJING_TIME):%Y%m%d_%H%M%S}_{os.getpid()}"
-
-        def emit(raw_line: bytes) -> None:
-            timestamp = datetime.now(BEIJING_TIME).isoformat(timespec="seconds")
-            line = f"[{timestamp} 北京时间] [run={run_id}] ".encode("utf-8") + raw_line.rstrip(b"\r\n") + b"\n"
-            os.write(log_file.fileno(), line)
+    with log_file:
+        def emit(data: bytes) -> None:
+            _write_all(log_file.fileno(), data)
             try:
-                os.write(1, line)
+                _write_all(1, data)
             except BrokenPipeError:
                 pass
 
-        emit(f"[record] start pid={os.getpid()} command={shlex.join(command)}".encode("utf-8"))
-        emit(f"[record] log_file={log_path}".encode("utf-8"))
+        print(f"[record] log_file={log_path}", flush=True)
+        emit(f"[record] command={shlex.join(command)}\n".encode("utf-8"))
         try:
             worker = subprocess.Popen(
                 command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 env=worker_env, start_new_session=True,
             )
         except OSError as exc:
-            emit(f"[record] start_failed={exc}".encode("utf-8"))
+            emit(f"[record] start_failed={exc}\n".encode("utf-8"))
             return 1
         old_handlers = {}
 
@@ -63,7 +100,6 @@ def run_with_beijing_log(script_path: str, argv: list[str], log_path: str | Path
         try:
             assert worker.stdout is not None
             output_fd = worker.stdout.fileno()
-            pending = bytearray()
             last_output = time.monotonic()
             while True:
                 ready, _, _ = select.select([output_fd], [], [], 0.5)
@@ -71,22 +107,13 @@ def run_with_beijing_log(script_path: str, argv: list[str], log_path: str | Path
                     chunk = os.read(output_fd, 65536)
                     if not chunk:
                         break
-                    pending.extend(chunk)
+                    emit(chunk)
                     last_output = time.monotonic()
-                    while b"\n" in pending:
-                        line, _, remainder = pending.partition(b"\n")
-                        emit(bytes(line))
-                        pending = bytearray(remainder)
-                    if len(pending) > 1024 * 1024:
-                        emit(bytes(pending))
-                        pending.clear()
                 elif worker.poll() is not None and time.monotonic() - last_output > 2:
                     # A crashed Kit process can leave a helper holding the pipe open.
                     break
-            if pending:
-                emit(bytes(pending))
             return_code = worker.wait()
-            emit(f"[record] exit_code={return_code} pid={worker.pid}".encode("utf-8"))
+            emit(f"\n[record] exit_code={return_code} pid={worker.pid}\n".encode("utf-8"))
             return return_code
         finally:
             for signum, handler in old_handlers.items():

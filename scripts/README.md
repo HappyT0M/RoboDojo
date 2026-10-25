@@ -77,11 +77,14 @@ remains CPU. The script does not change `CUDA_VISIBLE_DEVICES`; avoid an
 external mask that remaps CUDA indices differently from the physical GPU order
 used by Kit's `activeGpu` setting.
 
-Every run appends stdout, stderr, and native Isaac Sim output to the fixed
-`logs/record_deformable_tasks.log` path under the repository root. Each line
-gets an `Asia/Shanghai` timestamp with a `+08:00` offset; the same log also
-records the command and exit code. Native Kit timestamps ending in `Z` remain
-in the message as originally emitted.
+Each run saves stdout, stderr, and native Isaac Sim output to a separate file
+under the repository's fixed `logs/` directory. The filename uses Beijing time
+(`Asia/Shanghai`), for example
+`logs/record_put_rope_ball_in_basket_2026-10-25T21:47:38.log`. Log messages
+retain their original timestamps and formatting; the script prints the chosen
+log path at startup. Runs started within the same second get a numeric filename
+suffix rather than overwriting one another. With `--tasks` naming multiple
+tasks, the filename uses `multiple_tasks`.
 
 For the rope tasks, generate and verify layouts 0–9 with
 `scripts/generate_rope_eval_layouts.py` before recording. The script prints the

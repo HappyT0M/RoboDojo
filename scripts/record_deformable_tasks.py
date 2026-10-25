@@ -31,8 +31,8 @@
       默认只启用 RGB 采集；需要实例分割和 XLens 场景快照时传入 ``--xlens_snapshot``。
     * ``--wind WX WY WZ`` 设置世界坐标中的恒定风速；默认 0 0 0。布料使用粒子风速，
       可移动刚体及任务关节链 link 使用简化空气阻力；不修改任务 YAML。
-    * 标准输出、错误输出和 Isaac Sim 原生日志均加北京时间前缀，追加到
-      ``<仓库根目录>/logs/record_deformable_tasks.log``。
+    * 每次运行的标准输出、错误输出和 Isaac Sim 原生日志原样保存到
+      ``<仓库根目录>/logs/record_<任务名>_<北京时间>.log``。
 """
 
 from __future__ import annotations
@@ -56,14 +56,14 @@ for _import_root in (_PROJECT_ROOT, _XPOLICYLAB_ROOT):
         sys.path.insert(0, _import_root)
 
 # Keep the log supervisor outside Isaac Sim so native crashes and startup
-# diagnostics still reach the fixed log file. The child runs this same script.
+# diagnostics still reach a run-specific log. The child runs this same script.
 if __name__ == "__main__" and os.environ.get("ROBODOJO_PREVIEW_RECORD_WORKER") != "1":
-    from utils.preview_run_log import run_with_beijing_log
+    from utils.preview_run_log import run_with_timestamped_log
 
     raise SystemExit(
-        run_with_beijing_log(
+        run_with_timestamped_log(
             __file__, sys.argv[1:],
-            os.path.join(_PROJECT_ROOT, "logs", "record_deformable_tasks.log"),
+            os.path.join(_PROJECT_ROOT, "logs"),
         )
     )
 
