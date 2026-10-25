@@ -26,6 +26,7 @@ def test_three_rope_tasks_are_registered_as_cpu_only_articulations():
     task_index = yaml.safe_load((ROOT / "task/RoboDojo/config/_task.yml").read_text(encoding="utf-8"))
     for task in TASKS:
         assert task in task_index["tasks"]
+        assert task_index["tasks"][task]["eval_nums"] == 10
         assert task_index["tasks"][task]["physics_device"] == "cpu"
         assert task_index["tasks"][task]["gpu_dynamics_enabled"] is False
 
@@ -38,8 +39,10 @@ def test_three_rope_tasks_are_registered_as_cpu_only_articulations():
         assert "Garment" not in task_config
         assert "Fluid" not in task_config
 
-        layout_path = ROOT / f"Assets/Eval_Layout/RoboDojo/arx_x5/0/{task}_0.json"
-        assert layout_path.is_file()
+        layout_dir = ROOT / "Assets/Eval_Layout/RoboDojo/arx_x5/0"
+        assert sorted(path.name for path in layout_dir.glob(f"{task}_[0-9]*.json")) == [
+            f"{task}_{index}.json" for index in range(10)
+        ]
 
 
 def test_basket_task_uses_existing_centered_geometry_asset():

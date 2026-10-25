@@ -361,8 +361,8 @@ def _write_layout(task_name, objects):
 def frame_target_entry():
     """Reuse the stock hollow frame: 35.1 x 28.2 cm opening, 1.5 cm depth."""
     entry = _entry(
-        "frame", "ring", [-0.15, 0.15, 0.915],
-        (math.sqrt(0.5), math.sqrt(0.5), 0, 0),
+        "frame", "ring", [0.2, 0.05, 0.915],
+        (0.6532814824, 0.6532814824, 0.2705980501, 0.2705980501),
         scale=(1.5, 3.0, 50.0),
     )
     entry["physics"]["mesh_collision_approximation"] = "none"
@@ -438,14 +438,15 @@ def generate_assets():
         {
             "Articulation": {
                 "rope_chain": [
-                    _entry("rope_chain", "rope", [-0.15, -0.50, 0.79], (math.sqrt(0.5), 0, 0, math.sqrt(0.5)), "articulation")
+                    _entry("rope_chain", "rope", [-0.28, -0.12, 0.79], object_type="articulation")
                 ]
             },
             "Geometry": {"frame": [frame_target_entry()]},
         },
     )
     _write_layout("route_rope_around_posts", single_obstacle_objects())
-    print("Generated CPU rope chain, three fixtures, metadata, and three seed-0 layouts.")
+    print("Generated CPU rope chain, three fixtures, metadata, and three layout-0 scenes.")
+    print("Run python scripts/generate_rope_eval_layouts.py to build layouts 1-9 for each task.")
 
 
 if __name__ == "__main__":

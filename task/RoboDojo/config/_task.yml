@@ -9,17 +9,17 @@ common:
 
 tasks:
   put_rope_ball_in_basket:
-    eval_nums: 1
+    eval_nums: 10
     physics_device: "cpu"
     gpu_dynamics_enabled: false
 
   pass_rope_through_ring:
-    eval_nums: 1
+    eval_nums: 10
     physics_device: "cpu"
     gpu_dynamics_enabled: false
 
   route_rope_around_posts:
-    eval_nums: 1
+    eval_nums: 10
     physics_device: "cpu"
     gpu_dynamics_enabled: false
 

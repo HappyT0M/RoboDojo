@@ -45,6 +45,38 @@ The task directory under `--out_dir` receives per-camera MP4 files and a
 timestamped `_actions.jsonl` control log after exit. This script requires a GUI
 window and cannot be run with `--headless`.
 
+## Scene preview without model weights
+
+`record_deformable_tasks.py` advances the simulation with a neutral robot action
+and records camera video for **every saved layout of the selected task**. The
+layout number appears in each video and wind diagnostic filename. `--seed`
+selects the layout directory (usually `0`); `--layout_id` selects one layout
+file when a short preview is enough. The script defaults to no wind and 120
+action steps per layout. Use `--steps` or `--duration_s` to choose the length.
+`--wind WX WY WZ` sets constant world-space wind velocity in m/s; the default
+is `0 0 0`.
+
+```bash
+python scripts/record_deformable_tasks.py \
+  --task_name put_rope_ball_in_basket \
+  --seed 0 --layout_id 0 --steps 120 \
+  --out_dir eval_result/preview
+
+python scripts/record_deformable_tasks.py \
+  --task_name put_rope_ball_in_basket \
+  --seed 0 --duration_s 10 --wind 0 0.5 0 \
+  --rigid_force_scale 100 \
+  --out_dir eval_result/preview
+```
+
+For the rope tasks, generate and verify layouts 0–9 with
+`scripts/generate_rope_eval_layouts.py` before recording. The script prints the
+number of discovered layouts and warns if it is below the task's `eval_nums`.
+
+Wind uses cloth particle settings and dynamic task-body drag, with diagnostics
+saved beside the videos. `--rigid_force_scale` defaults to 100 for preview
+recordings. `--no-wind` overrides `--wind` when both are supplied.
+
 ## Typical eval flow
 
 ```text
@@ -145,7 +177,7 @@ static geometry, kinematic bodies and fixed-base task articulations are excluded
 Cloth retains its existing particle-system wind path and initialization timing.
 
 `--rigid-force-scale` defaults to **1**; use **100** to reproduce the default
-multiplier of `record_deformable_constant_wind.py`. This is a simplified drag
+multiplier of `record_deformable_tasks.py`. This is a simplified drag
 model using projected bounding-box areas, air density 1.225 kg/m³ and Cd=1.
 Keep the multiplier fixed across models. Zero/omitted wind disables rigid drag
 entirely, including still-air damping, preserving the original baseline.
@@ -194,6 +226,9 @@ it does not regenerate the rope or change the basket/posts layouts. The stock
 frame asset must already exist. Run the same evaluation command and task name.
 Verify the frame is visible and the opening is traversable in Isaac Sim before
 collecting comparison results; local geometry tests do not validate PhysX contact.
+
+For the ten-layout pilot across all three rope tasks, generate layouts 1–9
+after preparing the three layout-0 scenes. See [rope eval layouts](../docs/rope_eval_layouts.md).
 
 ### Task three: native single-obstacle routing (variant A)
 
