@@ -1,0 +1,27 @@
+Garment:
+  - common:
+      xlim: [-0.24, -0.04]
+      ylim: [-0.16, -0.08]
+      rotate_deg: 60
+      rotate_rand: true
+      relative_plane: "Table"
+    category:
+      - name: "Top_Long"
+        index: [1, 4, 6, 7, 9, 11]
+    select_mode:
+      nums: 1
+      mode: "allow_duplicate"
+      label: ["target"]
+
+Geometry:
+  - common:
+      relative_plane: "Table"
+      rotate_rand: false
+      qpos: [1, 0, 0, 0]
+    category:
+      - name: "folding_board"
+        index: [0]
+    select_mode:
+      nums: 1
+      mode: "same"
+      label: ["target_area"]

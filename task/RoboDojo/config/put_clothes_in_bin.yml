@@ -1,0 +1,35 @@
+Garment:
+  -
+    common:
+      relative_plane: "Table"
+      rotate_rand: false
+      qpos: [1, 0, 0, 0]
+    category:
+      - name: "Top_Long"
+        index: [1, 4, 6, 7, 9, 11]
+    select_mode:
+      nums: 1
+      mode: "allow_duplicate"
+      label: ["target"]
+
+Geometry:
+  -
+    common:
+      relative_plane: "Table"
+      rotate_rand: false
+      qpos: [1, 0, 0, 0]
+    category:
+      - name: "garment_bin"
+        index: [0]
+    select_mode:
+      nums: 1
+      mode: "same"
+      label: ["bin"]
+
+GarmentTask:
+  kind: "put_in_bin"
+  garment_label: "target"
+  target_label: "bin"
+  interior_bounds: [[-0.16, 0.16], [-0.12, 0.12], [0.025, 0.18]]
+  minimum_inside_fraction: 0.70
+  stable_steps: 15

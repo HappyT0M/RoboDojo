@@ -1,0 +1,133 @@
+{
+  "Garment": {
+    "Top_Long": [
+      {
+        "category": "Top_Long",
+        "category_idx": 9,
+        "group": null,
+        "label": "target",
+        "default_pos": [
+          -0.09,
+          -0.12,
+          0.775
+        ],
+        "default_ori": [
+          0.8660254037844387,
+          0,
+          0,
+          -0.49999999999999994
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ],
+        "relative_plane": "Table",
+        "need_check_stable": true,
+        "physics": {
+          "type": "garment"
+        },
+        "visual": {}
+      }
+    ]
+  },
+  "Geometry": {
+    "garment_rack": [
+      {
+        "category": "garment_rack",
+        "category_idx": 0,
+        "group": null,
+        "label": "rack",
+        "default_pos": [
+          0.2,
+          0.1,
+          0.765
+        ],
+        "default_ori": [
+          1,
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ],
+        "relative_plane": "Table",
+        "need_check_stable": true,
+        "physics": {
+          "type": "geometry",
+          "collision": true
+        },
+        "visual": {}
+      }
+    ]
+  },
+  "Room": {
+    "default": "Simple_Room_orange",
+    "default_pos": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "default_rot": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "scale": [
+      0.5,
+      0.5,
+      0.5
+    ]
+  },
+  "Table": {
+    "default": "material_0122",
+    "scale": [
+      1.4,
+      1.1,
+      0.05
+    ],
+    "default_pos": [
+      0.0,
+      -0.05,
+      0.74
+    ],
+    "default_ori": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "Ground": {
+    "geometry": "cube",
+    "thickness": 0.1,
+    "axis": "Z",
+    "default_pos": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "materials": {
+      "type": "mdl",
+      "default": "material_0564",
+      "random": false
+    },
+    "physics_material": {
+      "static_friction": 1.0,
+      "dynamic_friction": 1.0,
+      "restitution": 0.0,
+      "friction_combine_mode": "multiply",
+      "restitution_combine_mode": "multiply",
+      "compliant_contact_stiffness": 0.0,
+      "compliant_contact_damping": 0.0
+    }
+  },
+  "Background": {
+    "intensity": 1000,
+    "category_name": "brown_photostudio_02_4k.hdr"
+  }
+}

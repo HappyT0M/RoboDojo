@@ -29,12 +29,93 @@ class Func_Parser:
         self.robot_origin_endpose = [{} for _ in range(self.num_envs)]
         self.joint_ratio_transition_state = [{} for _ in range(self.num_envs)]
         self.rope_task_state = [{} for _ in range(self.num_envs)]
+        self.garment_task_state = [{} for _ in range(self.num_envs)]
 
     def reset(self):
         self.pre_state = [{} for _ in range(self.num_envs)]
         self.robot_origin_endpose = [{} for _ in range(self.num_envs)]
         self.joint_ratio_transition_state = [{} for _ in range(self.num_envs)]
         self.rope_task_state = [{} for _ in range(self.num_envs)]
+        self.garment_task_state = [{} for _ in range(self.num_envs)]
+
+    def is_garment_task_success(self, args):
+        """Evaluate simple spatial goals for the new wind-sensitive garment tasks."""
+        env_idx = int(args["env_idx"])
+        config = self.env.task_env_config.get("GarmentTask", {})
+        kind = str(config.get("kind", ""))
+        state = self.garment_task_state[env_idx]
+        garment_label = str(config.get("garment_label", "target"))
+        garment_name = self.layout_manager.get_instance_name(env_idx=env_idx, label=garment_label)
+        if garment_name is None:
+            return 0.0
+        garment = self.layout_manager.get_scene_object(env_idx=env_idx, inst_name=garment_name)
+        if garment is None or not callable(getattr(garment, "sample_mesh_vertices", None)):
+            return 0.0
+        points, _, _, _ = garment.sample_mesh_vertices()
+        points = np.asarray(points, dtype=float).reshape(-1, 3)
+        if points.size == 0 or not np.all(np.isfinite(points)):
+            return 0.0
+        env_origin = self.env.sim.scene.env_origins[env_idx].detach().cpu().numpy()
+        points = points - env_origin.reshape(1, 3)
+
+        condition = False
+        target_label = str(config.get("target_label", "target"))
+        target_name = self.layout_manager.get_instance_name(env_idx=env_idx, label=target_label)
+        if target_name is None:
+            return 0.0
+        target_pos, target_quat = self.layout_manager.get_instance_pose(
+            env_idx=env_idx, inst_name=target_name
+        )
+        target_pos = np.asarray(target_pos, dtype=float).reshape(3)
+        target_quat = np.asarray(target_quat, dtype=float).reshape(4)
+        rotation = t3d.quaternions.quat2mat(target_quat)
+        local_points = (points - target_pos) @ rotation
+
+        if kind == "flatten":
+            half_x, half_y = (float(v) for v in config.get("target_half_extents", [0.26, 0.18]))
+            inside_fraction = float(np.mean(
+                (np.abs(local_points[:, 0]) <= half_x)
+                & (np.abs(local_points[:, 1]) <= half_y)
+            ))
+            min_span_x, min_span_y = (float(v) for v in config.get("minimum_spans", [0.30, 0.18]))
+            max_vertical_span = float(config.get("maximum_vertical_span", 0.14))
+            condition = (
+                inside_fraction >= float(config.get("minimum_inside_fraction", 0.78))
+                and float(np.ptp(local_points[:, 0])) >= min_span_x
+                and float(np.ptp(local_points[:, 1])) >= min_span_y
+                and float(np.ptp(local_points[:, 2])) <= max_vertical_span
+            )
+        elif kind in {"hang", "drape"}:
+            bar_height = float(config.get("bar_height", 0.24))
+            band = float(config.get("bar_band", 0.035))
+            side_margin = float(config.get("side_margin", 0.045))
+            above_table = float(config.get("minimum_height_above_table", 0.06))
+            table_height = float(config.get("table_height", 0.765))
+            on_bar = np.abs(local_points[:, 1]) <= band
+            on_bar &= np.abs(local_points[:, 2] - bar_height) <= float(config.get("bar_height_tolerance", 0.10))
+            side_a = (local_points[:, 1] < -side_margin) & (points[:, 2] >= table_height + above_table)
+            side_b = (local_points[:, 1] > side_margin) & (points[:, 2] >= table_height + above_table)
+            min_fraction = float(config.get("minimum_side_fraction", 0.08))
+            condition = (
+                float(np.mean(on_bar)) >= float(config.get("minimum_bar_fraction", 0.015))
+                and float(np.mean(side_a)) >= min_fraction
+                and float(np.mean(side_b)) >= min_fraction
+            )
+        elif kind == "put_in_bin":
+            bounds = config.get("interior_bounds", [[-0.15, 0.15], [-0.11, 0.11], [0.035, 0.20]])
+            inside = np.ones(len(local_points), dtype=bool)
+            for axis, limits in enumerate(bounds):
+                inside &= (local_points[:, axis] >= float(limits[0])) & (local_points[:, axis] <= float(limits[1]))
+            condition = float(np.mean(inside)) >= float(config.get("minimum_inside_fraction", 0.70))
+        else:
+            raise ValueError(f"Unknown GarmentTask.kind: {kind!r}")
+
+        required_steps = int(config.get("stable_steps", 15))
+        counter = state.get("stable_counter")
+        if counter is None or counter.required_steps != required_steps:
+            counter = ConsecutiveSuccess(required_steps)
+            state["stable_counter"] = counter
+        return 1.0 if counter.update(bool(condition)) else 0.0
 
     def is_rope_task_success(self, args):
         """Evaluate the task-specific rigid-link rope goal over a stable window."""

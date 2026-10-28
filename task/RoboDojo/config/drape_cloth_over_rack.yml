@@ -1,0 +1,41 @@
+Garment:
+  -
+    common:
+      relative_plane: "Table"
+      rotate_rand: false
+      qpos: [1, 0, 0, 0]
+    category:
+      - name: "square_towel"
+        index: [0]
+    select_mode:
+      nums: 1
+      mode: "same"
+      label: ["target"]
+
+Geometry:
+  -
+    common:
+      relative_plane: "Table"
+      rotate_rand: false
+      qpos: [1, 0, 0, 0]
+    category:
+      - name: "garment_rack"
+        index: [0]
+    select_mode:
+      nums: 1
+      mode: "same"
+      label: ["rack"]
+
+GarmentTask:
+  kind: "drape"
+  garment_label: "target"
+  target_label: "rack"
+  bar_height: 0.255
+  bar_band: 0.035
+  bar_height_tolerance: 0.10
+  side_margin: 0.04
+  minimum_height_above_table: 0.08
+  minimum_side_fraction: 0.14
+  minimum_bar_fraction: 0.010
+  table_height: 0.765
+  stable_steps: 15

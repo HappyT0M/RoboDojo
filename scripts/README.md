@@ -94,6 +94,23 @@ For the rope tasks, generate and verify layouts 0–9 with
 `scripts/generate_rope_eval_layouts.py` before recording. The script prints the
 number of discovered layouts and warns if it is below the task's `eval_nums`.
 
+## Eight deformable evaluation tasks
+
+The fixed evaluation set contains `put_rope_ball_in_basket`,
+`pass_rope_through_ring`, `route_rope_around_posts`, `fold_clothes_deformable`,
+`flatten_clothes`, `hang_clothes`, `put_clothes_in_bin`, and
+`drape_cloth_over_rack`. Generate the three rope tasks' ten scene-varied layouts
+with `python scripts/generate_rope_eval_layouts.py`. Generate the light-weight
+fixtures (`folding_board`, `garment_rack`, `garment_bin`, `cloth_block`), the
+simulated `square_towel` mesh, and ten layouts for each garment task with
+`python scripts/generate_deformable_task_assets.py`. Both generators write into
+`Assets/`; the generated files are included by the repository ignore rules.
+
+`fold_clothes_deformable` reuses the native folding reward logic with its own
+configuration, ten layouts, and output task name. The native `fold_clothes`
+keeps its original layout files and default evaluation count of 25. Use
+`--task_name fold_clothes_deformable` to record or evaluate the custom version.
+
 Wind uses cloth particle settings and dynamic task-body drag, with diagnostics
 saved beside the videos. `--rigid_force_scale` defaults to 100 for preview
 recordings. `--no-wind` overrides `--wind` when both are supplied.

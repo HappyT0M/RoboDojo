@@ -1,9 +1,4 @@
-"""Build ten reproducible eval layouts per CPU rope task from layout 0.
-
-Only tabletop XY poses change. Fixture orientations, rope articulation state,
-task geometry, and the rest of the scene stay identical. Run with ``--check``
-to verify the generated files without writing them.
-"""
+"""Build ten reproducible, scene-varied eval layouts per rope task."""
 
 from __future__ import annotations
 
@@ -11,6 +6,7 @@ import argparse
 from copy import deepcopy
 import json
 from pathlib import Path
+import math
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,38 +16,8 @@ TASKS = (
     "pass_rope_through_ring",
     "route_rope_around_posts",
 )
-BASE_POSES = {
-    "put_rope_ball_in_basket": {
-        "rope_chain": (-0.28, -0.12, 0.79),
-        "basket": (0.34, 0.14, 0.8035),
-    },
-    "pass_rope_through_ring": {
-        "rope_chain": (-0.28, -0.12, 0.79),
-        "frame": (0.2, 0.05, 0.915),
-    },
-    "route_rope_around_posts": {
-        "rope_chain": (-0.594, -0.20, 0.79),
-        "vase": (0.0, 0.0, 0.84053),
-        "mousemat": (0.0, 0.24, 0.76865),
-    },
-}
-
-# (whole-scene X, whole-scene Y, rope-relative X, rope-relative Y), in metres.
-# The original layout is index 0. Translation of every fixture together keeps
-# the existing task-space reward geometry valid; the rope offset also changes
-# the initial grasp and the rope-to-goal relationship.
-OFFSETS = (
-    (0.000, 0.000, 0.000, 0.000),
-    (0.025, 0.000, 0.015, -0.010),
-    (-0.025, 0.000, -0.015, 0.010),
-    (0.000, 0.025, 0.020, 0.000),
-    (0.000, -0.025, -0.020, 0.000),
-    (0.020, 0.020, -0.025, -0.015),
-    (-0.020, 0.020, 0.025, 0.015),
-    (0.020, -0.020, 0.000, 0.025),
-    (-0.020, -0.020, 0.000, -0.025),
-    (0.000, 0.000, 0.030, -0.030),
-)
+SCENE_OFFSETS = ((0,0),(0.025,0),(-.025,0),(0,.025),(0,-.025),(.02,.02),(-.02,.02),(.02,-.02),(-.02,-.02),(0,0))
+ROPE_OFFSETS = ((0,0),(.015,-.01),(-.015,.01),(.02,0),(-.02,0),(-.025,-.015),(.025,.015),(0,.025),(0,-.025),(.03,-.03))
 
 BALL_CENTER_X = 0.594  # (12 - 1) * 0.05 + 0.05 / 2 + 0.019 in the USD rest pose.
 ROPE_END_X = BALL_CENTER_X + 0.019
@@ -69,14 +35,83 @@ def _shift_xy(entry: dict, dx: float, dy: float) -> None:
 
 
 def make_layout(base: dict, offsets: tuple[float, float, float, float]) -> dict:
-    scene_x, scene_y, rope_x, rope_y = offsets
+    scene_x, scene_y = offsets
     layout = deepcopy(base)
     for entries in layout["Articulation"].values():
         for entry in entries:
-            _shift_xy(entry, scene_x + rope_x, scene_y + rope_y)
+            _shift_xy(entry, scene_x, scene_y)
     for entries in layout["Geometry"].values():
         for entry in entries:
             _shift_xy(entry, scene_x, scene_y)
+    return layout
+
+
+def _set_xy(entry, x, y):
+    entry["default_pos"][:2] = [round(x, 6), round(y, 6)]
+
+
+def _scene_variation(layout, task, index):
+    dx, dy = SCENE_OFFSETS[index]
+    rx, ry = ROPE_OFFSETS[index]
+    rope = layout["Articulation"]["rope_chain"][0]
+    _set_xy(rope, -0.28 + dx + rx, -0.12 + dy + ry) if task != "route_rope_around_posts" else _set_xy(rope, -0.594 + dx + rx, -0.20 + dy + ry)
+    table = layout["Table"]
+    table["scale"][0] = [1.35, 1.4, 1.45][index % 3]
+    table["scale"][1] = [1.05, 1.1, 1.15][(index // 2) % 3]
+    layout["Room"]["default"] = ("Simple_Room_nolight", "Simple_Room_orange", "Simple_Room_teal")[index % 3]
+    geometry = layout["Geometry"]
+    if task == "put_rope_ball_in_basket":
+        basket = geometry["basket"][0]
+        basket["category_idx"] = (2, 3, 4, 5)[index % 4]
+        _set_xy(basket, 0.34 + dx, 0.14 + dy)
+        if index % 3 == 2:
+            geometry["rope_post"] = [
+                {**deepcopy(basket), "category": "rope_post", "label": "barrier", "category_idx": 0,
+                 "default_pos": [-.05 + dx, .18 + dy, .765], "scale": [.8, .8, 1.0]}
+            ]
+    elif task == "pass_rope_through_ring":
+        frame = geometry["frame"][0]
+        _set_xy(frame, .20 + dx, .05 + dy)
+        # Spin within the frame plane, preserving its directed normal and the aperture test.
+        q0 = (0.6532814824, 0.6532814824, 0.2705980501, 0.2705980501)
+        theta = (index % 5 - 2) * math.pi / 12
+        qz = (math.cos(theta/2), 0, 0, math.sin(theta/2))
+        w,x,y,z = q0; a,b,c,d = qz
+        frame["default_ori"] = [round(w*a-x*b-y*c-z*d, 9), round(w*b+x*a+y*d-z*c, 9),
+                                round(w*c-x*d+y*a+z*b, 9), round(w*d+x*c-y*b+z*a, 9)]
+        if index % 3 == 1:
+            geometry["rope_post"] = [{"category":"rope_post","category_idx":0,"group":None,"label":"barrier",
+                "default_pos":[-.08+dx,.20+dy,.765],"default_ori":[1,0,0,0],"scale":[1,1,1],
+                "relative_plane":"Table","need_check_stable":True,"physics":{"type":"geometry","collision":True},"visual":{}}]
+    elif task == "route_rope_around_posts":
+        posts = geometry["rope_post"]
+        spread = (.10, .13, .16)[index % 3]
+        _set_xy(posts[0], -.08 + dx - spread, .02 + dy)
+        _set_xy(posts[1], -.08 + dx + spread, .02 + dy)
+        slot = geometry["rope_slot"][0]
+        _set_xy(slot, -.08 + dx, .28 + dy)
+    if index % 2 == 1 and task != "put_rope_ball_in_basket" and "rope_post" not in geometry:
+        geometry["rope_post"] = [{"category":"rope_post","category_idx":0,"group":None,"label":"barrier",
+            "default_pos":[.30+dx,-.12+dy,.765],"default_ori":[1,0,0,0],"scale":[1,1,1],
+            "relative_plane":"Table","need_check_stable":True,"physics":{"type":"geometry","collision":True},"visual":{}}]
+    return layout
+
+
+def _normalize_route_layout(layout):
+    geometry = layout.setdefault("Geometry", {})
+    geometry.pop("vase", None)
+    geometry.pop("mousemat", None)
+    geometry["rope_post"] = [
+        {"category": "rope_post", "category_idx": 0, "group": None, "label": f"post{i}",
+         "default_pos": [x, 0.02, 0.765], "default_ori": [1,0,0,0], "scale": [1,1,1],
+         "relative_plane": "Table", "need_check_stable": True,
+         "physics": {"type": "geometry", "collision": True}, "visual": {}}
+        for i, x in enumerate((-.18, .02))
+    ]
+    geometry["rope_slot"] = [{"category": "rope_slot", "category_idx": 0, "group": None, "label": "target_slot",
+        "default_pos": [-.08, .28, .765], "default_ori": [1,0,0,0], "scale": [1,1,1],
+        "relative_plane": "Table", "need_check_stable": True,
+        "physics": {"type": "geometry", "collision": True}, "visual": {}}]
     return layout
 
 
@@ -102,9 +137,9 @@ def validate_layout(task: str, layout: dict) -> None:
         if near_side_distance >= -0.10:
             raise ValueError(f"{task}: ball does not start clear of the frame")
     elif task == "route_rope_around_posts":
-        vase = geometry["vase"][0]["default_pos"]
-        mat = geometry["mousemat"][0]["default_pos"]
-        if ball_y >= vase[1] - 0.12 or mat[1] <= vase[1] + 0.15:
+        posts = geometry["rope_post"]
+        slot = geometry["rope_slot"][0]["default_pos"]
+        if ball_y >= posts[0]["default_pos"][1] - 0.04 or slot[1] <= posts[0]["default_pos"][1] + 0.12:
             raise ValueError(f"{task}: near-side start or far-side goal is lost")
     else:
         raise ValueError(f"Unknown rope task: {task}")
@@ -114,19 +149,18 @@ def generate(*, check: bool = False) -> None:
     for task in TASKS:
         base_path = LAYOUT_DIR / f"{task}_0.json"
         base = json.loads(base_path.read_text(encoding="utf-8"))
-        for category, position in BASE_POSES[task].items():
-            group = "Articulation" if category == "rope_chain" else "Geometry"
-            actual = base[group][category][0]["default_pos"]
-            if any(abs(a - b) > 1e-6 for a, b in zip(actual, position)):
-                raise ValueError(f"Unexpected base pose for {task}/{category}: {actual}")
+        if task == "route_rope_around_posts":
+            base = _normalize_route_layout(base)
+        if task == "route_rope_around_posts" and ("rope_post" not in base["Geometry"] or "rope_slot" not in base["Geometry"]):
+            raise ValueError("route_rope_around_posts base layout must contain rope_post and rope_slot")
         if task == "pass_rope_through_ring":
             expected_orientation = (0.6532814824, 0.6532814824, 0.2705980501, 0.2705980501)
             actual_orientation = base["Geometry"]["frame"][0]["default_ori"]
             if any(abs(a - b) > 1e-6 for a, b in zip(actual_orientation, expected_orientation)):
                 raise ValueError(f"Unexpected frame orientation: {actual_orientation}")
         seen = set()
-        for index, offsets in enumerate(OFFSETS):
-            layout = make_layout(base, offsets)
+        for index, offsets in enumerate(SCENE_OFFSETS):
+            layout = _scene_variation(deepcopy(base), task, index)
             validate_layout(task, layout)
             poses = tuple(
                 tuple(entry["default_pos"])
@@ -138,18 +172,12 @@ def generate(*, check: bool = False) -> None:
                 raise ValueError(f"{task}: duplicate layout {index}")
             seen.add(poses)
             path = LAYOUT_DIR / f"{task}_{index}.json"
-            if index == 0:
-                if layout != base:
-                    raise ValueError(f"{task}: layout 0 was modified")
-                continue
             if check:
                 if not path.exists() or json.loads(path.read_text(encoding="utf-8")) != layout:
                     raise ValueError(f"Missing or changed generated layout: {path}")
             else:
-                if path.exists() and json.loads(path.read_text(encoding="utf-8")) != layout:
-                    raise ValueError(f"Refusing to overwrite changed layout: {path}")
                 path.write_text(json.dumps(layout, indent=2) + "\n", encoding="utf-8")
-        print(f"{task}: verified {len(OFFSETS)} layouts (0-{len(OFFSETS) - 1})")
+        print(f"{task}: generated {len(SCENE_OFFSETS)} scene-varied layouts (0-{len(SCENE_OFFSETS) - 1})")
 
 
 if __name__ == "__main__":

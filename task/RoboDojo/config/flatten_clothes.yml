@@ -1,0 +1,37 @@
+Garment:
+  -
+    common:
+      relative_plane: "Table"
+      rotate_rand: false
+      qpos: [1, 0, 0, 0]
+    category:
+      - name: "Top_Long"
+        index: [1, 4, 6, 7, 9, 11]
+    select_mode:
+      nums: 1
+      mode: "allow_duplicate"
+      label: ["target"]
+
+Geometry:
+  -
+    common:
+      relative_plane: "Table"
+      rotate_rand: false
+      qpos: [1, 0, 0, 0]
+    category:
+      - name: "folding_board"
+        index: [0]
+    select_mode:
+      nums: 1
+      mode: "same"
+      label: ["target_area"]
+
+GarmentTask:
+  kind: "flatten"
+  garment_label: "target"
+  target_label: "target_area"
+  target_half_extents: [0.29, 0.21]
+  minimum_spans: [0.30, 0.18]
+  minimum_inside_fraction: 0.78
+  maximum_vertical_span: 0.14
+  stable_steps: 15
