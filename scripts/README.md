@@ -104,7 +104,9 @@ with `python scripts/generate_rope_eval_layouts.py`. Generate the light-weight
 fixtures (`folding_board`, `garment_rack`, `garment_bin`, `cloth_block`), the
 simulated `square_towel` mesh, and ten layouts for each garment task with
 `python scripts/generate_deformable_task_assets.py`. Both generators write into
-`Assets/`; the generated files are included by the repository ignore rules.
+`Assets/`; that entire directory is excluded from Git. Export the assets and
+layouts for a separate Hugging Face dataset with `export_deformable_assets.py`.
+See [the asset publishing guide](../docs/DEFORMABLE_ASSETS.md).
 
 `fold_clothes_deformable` reuses the native folding reward logic with its own
 configuration, ten layouts, and output task name. The native `fold_clothes`
