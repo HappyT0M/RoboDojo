@@ -65,7 +65,11 @@ class TiledCaptureManager:
         2. Get all render_product control
         3. Attach Annotator
         """
-        self.camera_prim_paths.clear()
+        # Release the previous generation before allocating new RTX resources.
+        self._release_capture_resources()
+        self.cameras = self.camera_manager.cameras
+        self.camera_names = self.camera_manager.camera_names
+        self.num_cams = len(self.cameras[0])
         for env_id in range(self.num_envs):
             self.camera_prim_paths.append([])
             for camera in self.cameras[env_id]:
@@ -181,26 +185,32 @@ class TiledCaptureManager:
     def reset(
         self,
     ):
-        """
-        Soft Reset do not need to reset the replicator writer and camera.
-        Only Hard Reset need which means if we reset simulation backend we need to initialize camera again
-        Since Render product change, we also need to attch a new writer maybe
-        """
+        """Replace render products and annotators after the scene reset."""
         self.init_cameras()
 
-    def destroy(self):
-        """
-        Destroy the capture manager.
-        This function will be called when we close the environment.
-        """
-
+    def _release_capture_resources(self):
+        errors = []
+        for camera in self.tiled_cameras:
+            try:
+                camera.close()
+            except Exception as exc:
+                errors.append(exc)
+        self.tiled_cameras.clear()
+        self.tiled_render_products.clear()
         self.annotator.clear()
         self.annotator_type.clear()
         self.annotator_device.clear()
-        self.tiled_cameras.clear()
-        self.cameras.clear()
-        self.camera_names.clear()
-        self.sim = None
-        for rp in self.tiled_render_products:
-            rp.destroy()
         self.camera_prim_paths.clear()
+        self._output_buffers.clear()
+        if errors:
+            raise RuntimeError("Failed to release tiled capture resources") from errors[0]
+
+    def destroy(self):
+        """Release capture resources without clearing CameraManager's lists."""
+        try:
+            self._release_capture_resources()
+        finally:
+            self.cameras = []
+            self.camera_names = []
+            self.num_cams = 0
+            self.sim = None

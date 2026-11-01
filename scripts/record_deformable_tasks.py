@@ -25,8 +25,8 @@
 说明：
     * 复用 RoboDojo 官方的 ``create_eval_env`` 与摄像头/渲染管线，仅把策略客户端
       替换为“空操作”占位对象，因此不接入任何 VLA / 动作模型。
-    * 默认依次录制指定任务的全部已有布局。CPU 绳索任务每个布局使用独立的
-      Isaac Sim 子进程，避免旧绳链在下一次 reset 中破坏 PhysX 状态；
+    * 默认依次录制指定任务的全部已有布局。所有任务的每个布局均使用独立的
+      Isaac Sim 子进程，保存视频并关闭环境后退出，释放资源，再启动下一个布局；
       ``--layout_id`` 可只录制一个布局。
       ``--seed`` 选择 Eval_Layout 下的目录，不是布局编号。
     * 每个 episode 机械臂保持初始位姿、夹爪保持张开，仅推进物理仿真并采集摄像头画面。
@@ -56,6 +56,8 @@ _XPOLICYLAB_ROOT = os.path.join(_PROJECT_ROOT, "XPolicyLab")
 for _import_root in (_PROJECT_ROOT, _XPOLICYLAB_ROOT):
     if _import_root not in sys.path:
         sys.path.insert(0, _import_root)
+
+from utils.preview_run_log import write_preview_worker_result
 
 # Keep the log supervisor outside Isaac Sim so native crashes and startup
 # diagnostics still reach a run-specific log. The child runs this same script.
@@ -545,6 +547,8 @@ def record_task(task_name: str) -> str:
     env, _ = build_env(task_name)
     try:
         layouts = _available_layouts(env)
+        if len(layouts) != 1:
+            raise RuntimeError("每个录制子进程必须只处理一个布局，请通过脚本主入口启动录制")
         print(f"[record] 已找到 {len(env.seed_manager.seed_info)} 个布局文件；任务配置 eval_nums={env.eval_num}")
         print(f"[record] 本次录制布局: {[layout_id for _, layout_id in layouts]}")
         if args_cli.layout_id is None and len(layouts) < env.eval_num:
@@ -566,12 +570,14 @@ def record_task(task_name: str) -> str:
             raise RuntimeError(f"{task_name} 未完成的布局: {failed_layouts}")
         return task_output_dir
     finally:
+        print(f"[record] 关闭任务环境并释放相机资源: {task_name}", flush=True)
         env.close()
 
 
 def main():
     out_dirs = []
     failures = []
+    exit_code = 1
     try:
         tasks = _resolve_tasks()
         print(f"[record] 待录制任务: {tasks}")
@@ -586,14 +592,20 @@ def main():
                 traceback.print_exc()
 
         print("\n" + "=" * 70)
-        print("[record] 全部完成，视频输出目录：")
+        print(f"[record] 录制结束：成功 {len(out_dirs)}，失败 {len(failures)}，视频输出目录：")
         for output_dir in out_dirs:
             print(f"  - {output_dir}")
         print("=" * 70)
+        exit_code = 1 if failures else 0
     finally:
-        simulation_app.close()
-    if failures:
-        raise SystemExit(f"录制失败的任务: {', '.join(failures)}")
+        # Kit fast shutdown may terminate Python with code 0 inside close().
+        # Let the supervisor read the actual recording outcome after process exit.
+        try:
+            write_preview_worker_result(exit_code)
+        finally:
+            print("[record] 关闭 Isaac Sim；当前场景子进程即将退出", flush=True)
+            simulation_app.close()
+    raise SystemExit(exit_code)
 
 
 if __name__ == "__main__":

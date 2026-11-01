@@ -57,10 +57,18 @@ action steps per layout. Use `--steps` or `--duration_s` to choose the length.
 is `0 0 0`. Video preview enables only RGB camera capture by default to reduce
 GPU memory use. Add `--xlens_snapshot` if instance masks and XLens scene
 snapshots are needed.
-CPU rope tasks launch a fresh Isaac Sim process for each layout, sequentially,
-because their articulation objects are retained across in-process resets.
+Every task launches a fresh Isaac Sim process for each layout, sequentially.
+After saving the video, the worker releases camera resources, closes the
+environment and Isaac Sim, and exits. The supervisor waits for process exit
+before starting the next layout, so GPU resources cannot accumulate across
+layouts in one run. Eight tasks with ten layouts each produce 80 workers.
+`--tasks ... --layout_id N` starts one worker per task for layout N.
 The single command and Beijing-time log cover the whole sequence. Failed
-layouts are reported in the log while later layouts still run.
+layouts are reported while later layouts still run; the command exits nonzero
+if any worker fails or exits without reporting a completed recording.
+Each layout requires Isaac Sim startup time. On a single GPU, run the no-wind
+and wind commands one after the other; separate commands are not serialized
+against each other.
 
 ```bash
 python scripts/record_deformable_tasks.py \

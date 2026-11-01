@@ -198,20 +198,45 @@ class CameraView(XFormPrim):
         self._annotator_device = annotator_device
         self._annotators = dict()
         self.camera_resolution = camera_resolution
-        self._tiled_render_product = None
+        self._render_product = None
+        self._render_product_path = None
         self._setup_tiled_sensor()
 
     def __del__(self):
-        XFormPrim.__del__(self)
+        # During interpreter shutdown Replicator or the USD stage may be gone.
+        try:
+            self.close()
+        except Exception:
+            pass
+        try:
+            XFormPrim.__del__(self)
+        except Exception:
+            pass
+
+    def close(self):
+        """Explicitly release capture resources; safe to call more than once."""
         self._clean_up_tiled_sensor()
 
     def _clean_up_tiled_sensor(self):
         """Clean up the sensor by detaching annotators and destroying render products, and removing related prims."""
-        if self._tiled_render_product is not None:
-            # detach annotators from render product
-            self._tiled_annotator.detach([self._tiled_render_product.path])
-            # delete tiled render products
-            self._tiled_render_product.destroy()
+        render_product = getattr(self, "_render_product", None)
+        annotators = getattr(self, "_annotators", {})
+        errors = []
+        if render_product is not None:
+            for annotator in annotators.values():
+                try:
+                    annotator.detach([render_product.path])
+                except Exception as exc:
+                    errors.append(exc)
+            try:
+                render_product.destroy()
+            except Exception as exc:
+                errors.append(exc)
+        annotators.clear()
+        self._render_product = None
+        self._render_product_path = None
+        if errors:
+            raise RuntimeError("Failed to release camera capture resources") from errors[0]
 
     def _get_tiled_resolution(self, num_cameras, resolution) -> Tuple[int, int]:
         """Calculate the resolution for the tiled sensor based on the number of cameras and individual camera resolution.

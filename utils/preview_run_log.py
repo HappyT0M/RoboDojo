@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 import os
 from pathlib import Path
 import re
@@ -11,17 +12,14 @@ import shlex
 import signal
 import subprocess
 import sys
+from tempfile import TemporaryDirectory
 import time
 from zoneinfo import ZoneInfo
 
 
 BEIJING_TIME = ZoneInfo("Asia/Shanghai")
 WORKER_ENV_VAR = "ROBODOJO_PREVIEW_RECORD_WORKER"
-ROPE_TASKS = frozenset({
-    "put_rope_ball_in_basket",
-    "pass_rope_through_ring",
-    "route_rope_around_posts",
-})
+WORKER_RESULT_ENV_VAR = "ROBODOJO_PREVIEW_RECORD_RESULT"
 
 
 def _argument_value(argv: list[str], option: str) -> str | None:
@@ -59,8 +57,8 @@ def _without_options(argv: list[str], options: set[str]) -> list[str]:
 
 
 def plan_preview_workers(project_root: str | Path, argv: list[str]) -> list[list[str]]:
-    """Use a fresh process per CPU rope layout to avoid stale PhysX articulations."""
-    if any(arg in ("-h", "--help", "--layout_id") or arg.startswith("--layout_id=") for arg in argv):
+    """Use a fresh process for every task/layout, including cloth tasks."""
+    if any(arg in ("-h", "--help") for arg in argv):
         return [argv]
     task_name = _argument_value(argv, "--task_name")
     tasks_arg = _argument_value(argv, "--tasks")
@@ -73,11 +71,12 @@ def plan_preview_workers(project_root: str | Path, argv: list[str]) -> list[list
     base_argv = _without_options(argv, {"--task_name", "--tasks"})
     config_name = _argument_value(argv, "--env_cfg_type") or "arx_x5"
     seed = _argument_value(argv, "--seed") or "0"
+    selected_layout = _argument_value(argv, "--layout_id")
     layout_dir = Path(project_root) / "Assets" / "Eval_Layout" / "RoboDojo" / config_name / seed
     workers = []
     for task in tasks:
         task_argv = [*base_argv, "--task_name", task]
-        if task not in ROPE_TASKS or not layout_dir.is_dir():
+        if selected_layout is not None or not layout_dir.is_dir():
             workers.append(task_argv)
             continue
         pattern = re.compile(rf"{re.escape(task)}_(\d+)\.json")
@@ -91,6 +90,23 @@ def plan_preview_workers(project_root: str | Path, argv: list[str]) -> list[list
         else:
             workers.extend([*task_argv, "--layout_id", str(layout_id)] for layout_id in layout_ids)
     return workers
+
+
+def write_preview_worker_result(exit_code: int) -> None:
+    """Persist the recording outcome before Kit's fast shutdown can exit(0)."""
+    result_path = os.environ.get(WORKER_RESULT_ENV_VAR)
+    if result_path:
+        Path(result_path).write_text(json.dumps({"exit_code": exit_code}), encoding="utf-8")
+
+
+def _worker_exit_code(process_code: int, result_path: Path) -> int:
+    if process_code != 0:
+        return process_code
+    try:
+        result = json.loads(result_path.read_text(encoding="utf-8"))
+        return 0 if result == {"exit_code": 0} else 1
+    except (OSError, ValueError):
+        return 1
 
 
 def _open_run_log(log_dir: Path, argv: list[str]):
@@ -125,7 +141,7 @@ def run_with_timestamped_log(script_path: str, argv: list[str], log_dir: str | P
     worker_env["PYTHONUNBUFFERED"] = "1"
     log_path, log_file = _open_run_log(Path(log_dir), argv)
 
-    with log_file:
+    with log_file, TemporaryDirectory(prefix="robodojo-preview-") as result_dir:
         def emit(data: bytes) -> None:
             _write_all(log_file.fileno(), data)
             try:
@@ -137,6 +153,8 @@ def run_with_timestamped_log(script_path: str, argv: list[str], log_dir: str | P
         emit(f"[record] planned_workers={len(worker_argvs)}\n".encode("utf-8"))
         failed_workers = []
         for index, worker_argv in enumerate(worker_argvs, start=1):
+            result_path = Path(result_dir) / f"worker-{index}.json"
+            worker_env[WORKER_RESULT_ENV_VAR] = str(result_path)
             command = [sys.executable, script_path, *worker_argv]
             emit(f"\n[record] worker={index}/{len(worker_argvs)} command={shlex.join(command)}\n".encode("utf-8"))
             try:
@@ -177,8 +195,13 @@ def run_with_timestamped_log(script_path: str, argv: list[str], log_dir: str | P
                     elif worker.poll() is not None and time.monotonic() - last_output > 2:
                         # A crashed Kit process can leave a helper holding the pipe open.
                         break
-                return_code = worker.wait()
-                emit(f"\n[record] worker={index}/{len(worker_argvs)} exit_code={return_code} pid={worker.pid}\n".encode("utf-8"))
+                process_code = worker.wait()
+                help_requested = any(arg in ("-h", "--help") for arg in worker_argv)
+                return_code = process_code if help_requested else _worker_exit_code(process_code, result_path)
+                if return_code != process_code:
+                    emit(b"[record] worker did not report successful recording; treating it as failed.\n")
+                emit(f"\n[record] worker={index}/{len(worker_argvs)} exit_code={return_code} process_exit_code={process_code} pid={worker.pid}\n".encode("utf-8"))
+                emit(b"[record] scene worker process exited.\n")
                 if return_code != 0:
                     failed_workers.append(index)
             finally:
