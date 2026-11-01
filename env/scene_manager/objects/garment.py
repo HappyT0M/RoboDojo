@@ -194,7 +194,12 @@ class GarmentObject(SingleClothPrim):
         )
         material_prim = get_prim_at_path(material_path)
         if not material_prim:
-            material = PreviewSurface(prim_path=material_path, color=torch.tensor(color))
+            material = PreviewSurface(
+                prim_path=material_path,
+                color=np.array(color, dtype=np.float32),
+                roughness=self.visual_cfg.get("roughness", None),
+                metallic=self.visual_cfg.get("metallic", None),
+            )
             # Bind the new material to the geometry prim and its submeshes
             omni.kit.commands.execute(
                 "BindMaterialCommand",

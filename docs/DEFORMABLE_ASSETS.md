@@ -1,16 +1,18 @@
-# 八个可形变任务的 Hugging Face 资产管理
+# 七个可形变任务的 Hugging Face 资产管理
 
 GitHub 管理任务 Python/YAML、资产生成/导出脚本和下载说明。整个 `Assets` 目录由
 Hugging Face 管理；本地仍使用 RoboDojo 原有目录结构，任务代码无需改资产根路径。
 
 建议创建 Dataset 类型仓库，例如 `你的用户名/RoboDojo-Deformable`。当前导出范围为
-八个任务的 80 个布局和布局直接引用的 19 个物体实例目录。未使用的 `rope_ring`
+七个任务的 70 个布局和布局直接引用的 18 个物体实例目录。未使用的 `rope_ring`
 不会被导出：当前穿环任务使用的是原生 `frame`。
+`drape_cloth_over_rack` 已从任务集移除，保留 `hang_clothes`；新导出不再包含
+`square_towel` 或旧的搭毛巾布局。旧文件可以留作历史备份，不会被当前任务集使用。
 
 | 物体分类 | 目录及编号 |
 | --- | --- |
 | Articulation | `rope_chain/00000` |
-| Garment | `square_towel/00000`；`Top_Long/{00001,00004,00006,00007,00009,00011}` |
+| Garment | `Top_Long/{00001,00004,00006,00007,00009,00011}` |
 | Geometry | `basket/{00002,00003,00004,00005}`；`frame/00000` |
 | Geometry | `rope_post/00000`、`rope_slot/00000`、`folding_board/00000`、`garment_rack/00000`、`garment_bin/00000`、`cloth_block/00000` |
 
@@ -41,12 +43,15 @@ deformable_assets_v1/
 ├── README.md
 ├── manifest.json                 # 任务→资产映射、大小、SHA-256、官方依赖
 └── Assets/
-    ├── Object/RoboDojo/...        # 19 个实例目录
-    └── Eval_Layout/RoboDojo/arx_x5/0/...  # 80 个自定义任务布局
+    ├── Object/RoboDojo/...        # 18 个实例目录
+    └── Eval_Layout/RoboDojo/arx_x5/0/...  # 70 个自定义任务布局
 ```
 
 原生 `fold_clothes` 布局不在包内；自定义折衣任务使用 `fold_clothes_deformable`。
 复用的官方资产应附带来源说明和对应的原许可证；导出模板不会替它们重新指定许可证。
+
+2026-11-02 的支撑物缺失、穿环高度及衣物外观修复需要同时更新代码和资产。
+重新生成命令、同步清单和验证限制见 [场景修复说明](DEFORMABLE_SCENE_FIX.md)。
 
 ## 创建并上传到 Hugging Face
 

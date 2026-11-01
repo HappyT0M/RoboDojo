@@ -7,9 +7,13 @@ from copy import deepcopy
 import json
 from pathlib import Path
 import math
+import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from scripts import create_rope_assets as assets  # noqa: E402
+
 LAYOUT_DIR = ROOT / "Assets/Eval_Layout/RoboDojo/arx_x5/0"
 TASKS = (
     "put_rope_ball_in_basket",
@@ -79,6 +83,9 @@ def _scene_variation(layout, task, index):
         w,x,y,z = q0; a,b,c,d = qz
         frame["default_ori"] = [round(w*a-x*b-y*c-z*d, 9), round(w*b+x*a+y*d-z*c, 9),
                                 round(w*c-x*d+y*a+z*b, 9), round(w*d+x*c-y*b+z*a, 9)]
+        lowest = assets.transformed_min_z("Geometry", "frame", frame["category_idx"],
+                                          frame["default_ori"], frame["scale"])
+        frame["default_pos"][2] = round(assets.table_top(layout) - lowest + 0.002, 6)
         if index % 3 == 1:
             geometry["rope_post"] = [{"category":"rope_post","category_idx":0,"group":None,"label":"barrier",
                 "default_pos":[-.08+dx,.20+dy,.765],"default_ori":[1,0,0,0],"scale":[1,1,1],
@@ -130,7 +137,12 @@ def validate_layout(task: str, layout: dict) -> None:
         if abs(ball_y - basket[1]) <= 0.11:
             raise ValueError(f"{task}: ball starts too close to the basket")
     elif task == "pass_rope_through_ring":
-        frame = geometry["frame"][0]["default_pos"]
+        frame_entry = geometry["frame"][0]
+        frame = frame_entry["default_pos"]
+        lowest = assets.transformed_min_z("Geometry", "frame", frame_entry["category_idx"],
+                                          frame_entry["default_ori"], frame_entry["scale"])
+        if frame[2] + lowest < assets.table_top(layout) - 1e-6:
+            raise ValueError(f"{task}: frame intersects the table")
         # The configured directed far side is (-X, +Y); keep the nominal ball
         # clearly on the near side before any policy action or wind step.
         near_side_distance = ((frame[0] - ball_x) + (ball_y - frame[1])) / 2**0.5
@@ -153,11 +165,8 @@ def generate(*, check: bool = False) -> None:
             base = _normalize_route_layout(base)
         if task == "route_rope_around_posts" and ("rope_post" not in base["Geometry"] or "rope_slot" not in base["Geometry"]):
             raise ValueError("route_rope_around_posts base layout must contain rope_post and rope_slot")
-        if task == "pass_rope_through_ring":
-            expected_orientation = (0.6532814824, 0.6532814824, 0.2705980501, 0.2705980501)
-            actual_orientation = base["Geometry"]["frame"][0]["default_ori"]
-            if any(abs(a - b) > 1e-6 for a, b in zip(actual_orientation, expected_orientation)):
-                raise ValueError(f"Unexpected frame orientation: {actual_orientation}")
+        # Each rotation is derived from the canonical q0, so layout 0 from a
+        # previous generation is a valid input and repeated runs are identical.
         seen = set()
         for index, offsets in enumerate(SCENE_OFFSETS):
             layout = _scene_variation(deepcopy(base), task, index)

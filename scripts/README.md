@@ -61,7 +61,7 @@ Every task launches a fresh Isaac Sim process for each layout, sequentially.
 After saving the video, the worker releases camera resources, closes the
 environment and Isaac Sim, and exits. The supervisor waits for process exit
 before starting the next layout, so GPU resources cannot accumulate across
-layouts in one run. Eight tasks with ten layouts each produce 80 workers.
+layouts in one run. Seven tasks with ten layouts each produce 70 workers.
 `--tasks ... --layout_id N` starts one worker per task for layout N.
 The single command and Beijing-time log cover the whole sequence. Failed
 layouts are reported while later layouts still run; the command exits nonzero
@@ -111,19 +111,30 @@ For the rope tasks, generate and verify layouts 0–9 with
 `scripts/generate_rope_eval_layouts.py` before recording. The script prints the
 number of discovered layouts and warns if it is below the task's `eval_nums`.
 
-## Eight deformable evaluation tasks
+## Seven deformable evaluation tasks
 
 The fixed evaluation set contains `put_rope_ball_in_basket`,
 `pass_rope_through_ring`, `route_rope_around_posts`, `fold_clothes_deformable`,
-`flatten_clothes`, `hang_clothes`, `put_clothes_in_bin`, and
-`drape_cloth_over_rack`. Generate the three rope tasks' ten scene-varied layouts
+`flatten_clothes`, `hang_clothes`, and `put_clothes_in_bin`.
+`drape_cloth_over_rack` has been retired in favor of `hang_clothes`.
+Generate the three rope tasks' ten scene-varied layouts
 with `python scripts/generate_rope_eval_layouts.py`. Generate the light-weight
-fixtures (`folding_board`, `garment_rack`, `garment_bin`, `cloth_block`), the
-simulated `square_towel` mesh, and ten layouts for each garment task with
+fixtures (`folding_board`, `garment_rack`, `garment_bin`, `cloth_block`) and
+ten layouts for each of the four garment tasks with
 `python scripts/generate_deformable_task_assets.py`. Both generators write into
 `Assets/`; that entire directory is excluded from Git. Export the assets and
 layouts for a separate Hugging Face dataset with `export_deformable_assets.py`.
 See [the asset publishing guide](../docs/DEFORMABLE_ASSETS.md).
+
+For an existing installation, rebuild the two active rope fixtures with
+`python scripts/create_rope_assets.py --update-fixtures`, then run both layout
+generators above. This avoids resetting the rope and seed scenes. Custom
+fixtures have an Xform root with a child render/collision Mesh; static triangle
+collisions preserve the bin and target-slot openings. Each frame's height is
+computed after rotation so its bottom stays 2 mm above the tabletop. Custom
+garment layouts select muted matte colors and place the lowest cloth vertices
+above the support surface. The native `Top_Long` assets are unchanged.
+See [the scene repair and sync checklist](../docs/DEFORMABLE_SCENE_FIX.md).
 
 `fold_clothes_deformable` reuses the native folding reward logic with its own
 configuration, ten layouts, and output task name. The native `fold_clothes`

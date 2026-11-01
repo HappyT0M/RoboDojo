@@ -1,4 +1,4 @@
-"""Export the objects and saved scenes used by the eight custom tasks for HF.
+"""Export the objects and saved scenes used by the seven custom tasks for HF.
 
 This creates a local dataset directory only. Robot, room, ground, and shared
 material dependencies remain in the official RoboDojo asset installation.
@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TASKS = (
     "put_rope_ball_in_basket", "pass_rope_through_ring", "route_rope_around_posts",
     "fold_clothes_deformable", "flatten_clothes", "hang_clothes",
-    "put_clothes_in_bin", "drape_cloth_over_rack",
+    "put_clothes_in_bin",
 )
 OBJECT_TYPES = ("Rigid", "Dynamic", "Geometry", "Garment", "Articulation", "Fluid")
 SKIP = {".git", ".cache", ".DS_Store", "__pycache__"}

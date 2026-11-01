@@ -26,6 +26,7 @@ def _fmt_vec(values):
 
 
 def _mesh_usd(name, points, faces, color):
+    """Keep render/collision meshes below the Xform used by Isaac's reference loader."""
     counts = ", ".join("3" for _ in faces)
     indices = ", ".join(str(index) for face in faces for index in face)
     point_text = ",\n        ".join(_fmt_vec(point) for point in points)
@@ -36,10 +37,15 @@ def _mesh_usd(name, points, faces, color):
     upAxis = "Z"
 )
 
-def Mesh "{name}" (
-    prepend apiSchemas = ["PhysicsCollisionAPI"]
-)
+def Xform "{name}"
 {{
+    def Mesh "mesh" (
+        prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "MaterialBindingAPI"]
+    )
+    {{
+    bool physics:collisionEnabled = true
+    uniform token physics:approximation = "none"
+    rel material:binding = </{name}/Looks/Surface>
     uniform bool doubleSided = true
     uniform token subdivisionScheme = "none"
     uniform token orientation = "rightHanded"
@@ -50,8 +56,43 @@ def Mesh "{name}" (
     int[] faceVertexIndices = [{indices}]
     color3f[] primvars:displayColor = [{_fmt_vec(color)}]
     uniform token[] xformOpOrder = []
+    }}
+    def Scope "Looks"
+    {{
+        def Material "Surface"
+        {{
+            token outputs:surface.connect = </{name}/Looks/Surface/Shader.outputs:surface>
+            def Shader "Shader"
+            {{
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = {_fmt_vec(color)}
+                float inputs:roughness = 0.8
+                float inputs:metallic = 0
+                token outputs:surface
+            }}
+        }}
+    }}
 }}
 '''
+
+
+def transformed_min_z(kind, category, index, quaternion, scale):
+    """Lowest asset AABB corner after scale/rotation, before translation (metres)."""
+    path = ASSETS / kind / category / f"{index:05d}" / "metadata.json"
+    vertices = json.loads(path.read_text(encoding="utf-8"))["geometry"]["aligned_bbox"]["vertices"]
+    norm = math.sqrt(sum(v*v for v in quaternion))
+    if norm <= 1e-12:
+        raise ValueError("Cannot place an asset with a zero quaternion")
+    w, x, y, z = (v / norm for v in quaternion)
+    row_z = (2*(x*z-w*y), 2*(y*z+w*x), 1-2*(x*x+y*y))
+    return min(sum(row_z[k]*scale[k]*v[k] for k in range(3)) for v in vertices)
+
+
+def table_top(layout):
+    table = layout["Table"]
+    if table["default_ori"] != [1.0, 0.0, 0.0, 0.0]:
+        raise ValueError("Generated scenes require a horizontal table")
+    return table["default_pos"][2] + table["scale"][2] / 2
 
 
 def _add_box(points, faces, center, size):
@@ -449,16 +490,29 @@ def generate_assets():
     print("Run python scripts/generate_rope_eval_layouts.py to build layouts 1-9 for each task.")
 
 
+def update_fixture_assets():
+    """Repair the active rope fixtures without replacing saved scenes or the rope."""
+    for name, mesh, color in (
+        ("rope_post", _post_mesh, (0.32, 0.38, 0.44)),
+        ("rope_slot", _slot_mesh, (0.18, 0.42, 0.30)),
+    ):
+        points, faces = mesh()
+        _write_geometry_asset(name, points, faces, color)
+
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--update-ring-layout", action="store_true")
     modes.add_argument("--update-posts-layout", action="store_true")
+    modes.add_argument("--update-fixtures", action="store_true", help="Rebuild active fixtures only; preserve layouts")
     args = parser.parse_args()
     if args.update_ring_layout:
         update_ring_layout()
     elif args.update_posts_layout:
         update_posts_layout()
+    elif args.update_fixtures:
+        update_fixture_assets()
     else:
         generate_assets()
