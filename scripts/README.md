@@ -66,6 +66,15 @@ layouts in one run. Eight tasks with ten layouts each produce 80 workers.
 The single command and Beijing-time log cover the whole sequence. Failed
 layouts are reported while later layouts still run; the command exits nonzero
 if any worker fails or exits without reporting a completed recording.
+After environment cleanup, the disposable worker uses Isaac Sim's immediate
+exit (`close(wait_for_replicator=False, skip_cleanup=True)`) to avoid a second
+Replicator cleanup pass. The supervisor allows 60 seconds from the start of
+environment cleanup for the worker to exit, then sends SIGTERM and, after
+another 5 seconds, SIGKILL if needed. It waits for exit before the next layout
+and reports a shutdown timeout as a failed worker, even if videos were saved.
+The known `Invalid NodeObj object` error during annotator detach is logged as
+a warning while remaining capture resources are still released; other cleanup
+errors remain failures.
 Each layout requires Isaac Sim startup time. On a single GPU, run the no-wind
 and wind commands one after the other; separate commands are not serialized
 against each other.

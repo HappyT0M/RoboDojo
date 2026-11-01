@@ -57,7 +57,7 @@ for _import_root in (_PROJECT_ROOT, _XPOLICYLAB_ROOT):
     if _import_root not in sys.path:
         sys.path.insert(0, _import_root)
 
-from utils.preview_run_log import write_preview_worker_result
+from utils.preview_run_log import mark_preview_worker_shutdown, write_preview_worker_result
 
 # Keep the log supervisor outside Isaac Sim so native crashes and startup
 # diagnostics still reach a run-specific log. The child runs this same script.
@@ -570,6 +570,7 @@ def record_task(task_name: str) -> str:
             raise RuntimeError(f"{task_name} 未完成的布局: {failed_layouts}")
         return task_output_dir
     finally:
+        mark_preview_worker_shutdown()
         print(f"[record] 关闭任务环境并释放相机资源: {task_name}", flush=True)
         env.close()
 
@@ -604,7 +605,9 @@ def main():
             write_preview_worker_result(exit_code)
         finally:
             print("[record] 关闭 Isaac Sim；当前场景子进程即将退出", flush=True)
-            simulation_app.close()
+            # Videos have already been finalized and env.close() attempted.
+            # This disposable worker must not wait on Replicator's stale graph.
+            simulation_app.close(wait_for_replicator=False, skip_cleanup=True)
     raise SystemExit(exit_code)
 
 

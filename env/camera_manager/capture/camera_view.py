@@ -6,6 +6,7 @@
 # distribution of this software and related documentation without an express
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 #
+import logging
 from typing import Any, List, Tuple
 
 from isaacsim.core.prims import XFormPrim
@@ -13,6 +14,8 @@ import numpy as np
 import omni.replicator.core as rep
 import torch
 import warp as wp
+
+_LOGGER = logging.getLogger(__name__)
 
 ANNOTATOR_SPEC = {
     "rgb": {"name": "rgba", "channels": 4, "dtype": wp.uint8},
@@ -227,7 +230,13 @@ class CameraView(XFormPrim):
                 try:
                     annotator.detach([render_product.path])
                 except Exception as exc:
-                    errors.append(exc)
+                    # SyntheticData can retain invalid graph-node handles after
+                    # tiled capture. Only tolerate this known teardown error;
+                    # still destroy the render product and report other errors.
+                    if isinstance(exc, TypeError) and "Invalid NodeObj object" in str(exc):
+                        _LOGGER.warning("Stale annotator node during detach (%s): %s", render_product.path, exc)
+                    else:
+                        errors.append(exc)
             try:
                 render_product.destroy()
             except Exception as exc:

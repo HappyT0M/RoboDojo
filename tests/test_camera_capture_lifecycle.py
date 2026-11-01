@@ -1,6 +1,7 @@
 """Exercise real capture lifecycle methods with fake Replicator/CUDA resources."""
 import ast
 from copy import deepcopy
+import logging
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 import unittest
@@ -40,8 +41,9 @@ class CameraCaptureLifecycleTests(unittest.TestCase):
             create=SimpleNamespace(render_product_tiled=self.create_product),
             AnnotatorRegistry=SimpleNamespace(get_annotator=self.create_annotator),
         )
+        self.logger = logging.getLogger("robodojo.capture.tests")
         self.CameraView = load_class("env/camera_manager/capture/camera_view.py", "CameraView", {
-            "XFormPrim": FakeXFormPrim, "rep": rep, "ANNOTATOR_SPEC": spec,
+            "XFormPrim": FakeXFormPrim, "rep": rep, "ANNOTATOR_SPEC": spec, "_LOGGER": self.logger,
         })
         omega = SimpleNamespace(
             to_container=lambda config, **kw: deepcopy(vars(config) if isinstance(config, SimpleNamespace) else config),
@@ -143,6 +145,34 @@ class CameraCaptureLifecycleTests(unittest.TestCase):
         for annotator in self.annotators:
             annotator.detach.assert_called_once()
         manager.destroy()
+
+    def test_invalid_node_detach_does_not_invalidate_completed_capture(self):
+        manager, _ = self.make_manager()
+        manager.reset()
+        self.annotators[0].detach.side_effect = TypeError("Invalid NodeObj object in Py_Node in getAttributes")
+        with self.assertLogs(self.logger, level="WARNING") as output:
+            manager.destroy()
+        self.assertIn("Stale annotator node", output.output[0])
+        self.assertFalse(self.live)
+        for annotator in self.annotators:
+            annotator.detach.assert_called_once()
+        for product in self.products:
+            product.destroy.assert_called_once()
+
+    def test_unrelated_type_errors_are_still_failures(self):
+        camera = self.CameraView(["/World/camera"], output_annotators=["rgb"])
+        self.annotators[0].detach.side_effect = TypeError("unexpected argument type")
+        with self.assertRaisesRegex(RuntimeError, "release camera capture"):
+            camera.close()
+        self.assertFalse(self.live)
+
+    def test_invalid_node_does_not_hide_render_product_destroy_failure(self):
+        camera = self.CameraView(["/World/camera"], output_annotators=["rgb"])
+        self.annotators[0].detach.side_effect = TypeError("Invalid NodeObj object in Py_Node in getAttributes")
+        self.products[0].destroy.side_effect = RuntimeError("destroy failed")
+        with self.assertLogs(self.logger, level="WARNING"), self.assertRaises(RuntimeError) as error:
+            camera.close()
+        self.assertEqual(str(error.exception.__cause__), "destroy failed")
 
 
 if __name__ == "__main__":

@@ -20,6 +20,7 @@ from zoneinfo import ZoneInfo
 BEIJING_TIME = ZoneInfo("Asia/Shanghai")
 WORKER_ENV_VAR = "ROBODOJO_PREVIEW_RECORD_WORKER"
 WORKER_RESULT_ENV_VAR = "ROBODOJO_PREVIEW_RECORD_RESULT"
+TERMINATE_GRACE_S = 5.0
 
 
 def _argument_value(argv: list[str], option: str) -> str | None:
@@ -92,11 +93,19 @@ def plan_preview_workers(project_root: str | Path, argv: list[str]) -> list[list
     return workers
 
 
+def mark_preview_worker_shutdown() -> None:
+    """Arm the supervisor's timeout before environment/Kit cleanup starts."""
+    result_path = os.environ.get(WORKER_RESULT_ENV_VAR)
+    if result_path:
+        Path(result_path).with_suffix(".closing").touch()
+
+
 def write_preview_worker_result(exit_code: int) -> None:
     """Persist the recording outcome before Kit's fast shutdown can exit(0)."""
     result_path = os.environ.get(WORKER_RESULT_ENV_VAR)
     if result_path:
         Path(result_path).write_text(json.dumps({"exit_code": exit_code}), encoding="utf-8")
+        mark_preview_worker_shutdown()
 
 
 def _worker_exit_code(process_code: int, result_path: Path) -> int:
@@ -133,7 +142,9 @@ def _write_all(descriptor: int, data: bytes) -> None:
         remaining = remaining[written:]
 
 
-def run_with_timestamped_log(script_path: str, argv: list[str], log_dir: str | Path) -> int:
+def run_with_timestamped_log(
+    script_path: str, argv: list[str], log_dir: str | Path, *, shutdown_timeout_s: float = 60.0,
+) -> int:
     """Run planned Isaac workers sequentially and stream output to one log."""
     worker_argvs = plan_preview_workers(Path(script_path).resolve().parents[1], argv)
     worker_env = os.environ.copy()
@@ -168,6 +179,9 @@ def run_with_timestamped_log(script_path: str, argv: list[str], log_dir: str | P
                 continue
             old_handlers = {}
             received_signal = 0
+            shutdown_deadline = None
+            kill_deadline = None
+            shutdown_timed_out = False
 
             def forward_signal(signum, _frame) -> None:
                 nonlocal received_signal
@@ -184,21 +198,44 @@ def run_with_timestamped_log(script_path: str, argv: list[str], log_dir: str | P
                 assert worker.stdout is not None
                 output_fd = worker.stdout.fileno()
                 last_output = time.monotonic()
+                output_open = True
                 while True:
-                    ready, _, _ = select.select([output_fd], [], [], 0.5)
+                    now = time.monotonic()
+                    if worker.poll() is None:
+                        if shutdown_deadline is None and result_path.with_suffix(".closing").exists():
+                            shutdown_deadline = now + shutdown_timeout_s
+                        if shutdown_deadline is not None and now >= shutdown_deadline and not shutdown_timed_out:
+                            shutdown_timed_out = True
+                            kill_deadline = now + TERMINATE_GRACE_S
+                            emit(f"[record][WARN] shutdown_timeout={shutdown_timeout_s:g}s pid={worker.pid}; sending SIGTERM\n".encode())
+                            try:
+                                os.killpg(worker.pid, signal.SIGTERM)
+                            except ProcessLookupError:
+                                pass
+                        elif kill_deadline is not None and now >= kill_deadline:
+                            emit(f"[record][WARN] shutdown still blocked pid={worker.pid}; sending SIGKILL\n".encode())
+                            try:
+                                os.killpg(worker.pid, signal.SIGKILL)
+                            except ProcessLookupError:
+                                pass
+                            kill_deadline = None
+                    ready, _, _ = select.select([output_fd] if output_open else [], [], [], 0.5)
                     if ready:
                         chunk = os.read(output_fd, 65536)
                         if not chunk:
-                            break
-                        emit(chunk)
-                        last_output = time.monotonic()
-                    elif worker.poll() is not None and time.monotonic() - last_output > 2:
+                            output_open = False
+                        else:
+                            emit(chunk)
+                            last_output = time.monotonic()
+                    if worker.poll() is not None and (not output_open or time.monotonic() - last_output > 2):
                         # A crashed Kit process can leave a helper holding the pipe open.
                         break
                 process_code = worker.wait()
                 help_requested = any(arg in ("-h", "--help") for arg in worker_argv)
                 return_code = process_code if help_requested else _worker_exit_code(process_code, result_path)
-                if return_code != process_code:
+                if shutdown_timed_out:
+                    return_code = return_code or 1
+                if return_code != process_code and not shutdown_timed_out:
                     emit(b"[record] worker did not report successful recording; treating it as failed.\n")
                 emit(f"\n[record] worker={index}/{len(worker_argvs)} exit_code={return_code} process_exit_code={process_code} pid={worker.pid}\n".encode("utf-8"))
                 emit(b"[record] scene worker process exited.\n")
