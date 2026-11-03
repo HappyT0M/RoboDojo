@@ -1,0 +1,36 @@
+{
+  "policy_dir": "XPolicyLab/policy/Pi_05",
+  "ckpt": "RoboDojo-sim-arx_x5-joint-0",
+  "env_cfg": "arx_x5",
+  "action_type": "joint",
+  "policy_env": "uv",
+  "eval_env": "RoboDojo",
+  "seed": 0,
+  "eval_num": 10,
+  "num_envs": 1,
+  "rigid_force_scale": 100,
+  "parallel": true,
+  "tasks": [
+    "put_rope_ball_in_basket",
+    "pass_rope_through_ring",
+    "route_rope_around_posts",
+    "fold_clothes_deformable",
+    "flatten_clothes",
+    "hang_clothes",
+    "put_clothes_in_bin"
+  ],
+  "groups": [
+    {
+      "name": "no_wind",
+      "wind": [0, 0, 0],
+      "policy_gpu": 0,
+      "env_gpu": 1
+    },
+    {
+      "name": "wind_y_0p5",
+      "wind": [0, 0.5, 0],
+      "policy_gpu": 2,
+      "env_gpu": 3
+    }
+  ]
+}

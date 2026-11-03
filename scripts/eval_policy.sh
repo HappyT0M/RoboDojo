@@ -138,6 +138,16 @@ fi
 render_interval="$(python3 -c "import sys,yaml;print(yaml.safe_load(open(sys.argv[1])).get('render_interval',1))" "$sim_cfg_file")"
 num_envs="$(python3 -c "import sys,yaml;print(yaml.safe_load(open(sys.argv[1])).get('scene',{}).get('num_envs',1))" "$sim_cfg_file")"
 
+# Per-run override, inherited through the policy client wrapper. Avoid editing
+# shared YAML when independent evaluation groups run concurrently.
+if [[ -n "${ROBODOJO_NUM_ENVS+x}" ]]; then
+  if [[ ! "${ROBODOJO_NUM_ENVS}" =~ ^[1-9][0-9]*$ ]]; then
+    echo "[ERROR] ROBODOJO_NUM_ENVS must be a positive integer" >&2
+    exit 2
+  fi
+  num_envs="${ROBODOJO_NUM_ENVS}"
+fi
+
 echo "[INFO] render_interval = ${render_interval}"
 echo "[INFO] num_envs        = ${num_envs}"
 

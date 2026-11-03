@@ -8,6 +8,58 @@
 | [install.sh](install.sh) | One-time environment setup (conda, Isaac Sim, submodules) |
 | [init_assets.sh](init_assets.sh) | Download robot/object assets |
 | [eval_policy.sh](eval_policy.sh) | Isaac Sim eval client (called by `robodojo.sh client` and XPolicyLab) |
+| [eval_from_config.py](eval_from_config.py) | JSON-configured task sweeps; defaults to parallel Pi0.5 wind / no-wind groups |
+
+## 使用 JSON 启动 Pi0.5 评测
+
+修改 [`configs/pi05_deformable.json`](configs/pi05_deformable.json)，然后在服务器的
+RoboDojo 根目录运行：
+
+```bash
+conda activate RoboDojo
+python scripts/eval_from_config.py
+```
+
+默认无风 `[0, 0, 0]` 与有风 `[0, 0.5, 0]` 两组并行，每组依次评测七个任务，
+每个任务评测十个布局。选择服务器上空闲的显卡后，修改各组 GPU 编号。
+
+| JSON 字段 | 含义 |
+| --- | --- |
+| `policy_dir` / `ckpt` | 模型目录及权重名称或路径 |
+| `policy_env` / `eval_env` | 模型运行环境（Pi0.5 为 `uv`）及仿真 Conda 环境 |
+| `env_cfg` / `action_type` | 机器人配置及动作类型，默认 `arx_x5` / `joint` |
+| `seed` | 布局目录种子，默认 `0` |
+| `eval_num` | 每组每任务的评测数量；`10` 为十个布局，`1` 为一个；`"native"` 使用任务原生数量 |
+| `num_envs` | 单个仿真进程同时创建的场景数，默认 `1`，多个布局依次 reset |
+| `rigid_force_scale` | 刚体风力倍率，默认 `100`，与之前录制保持一致 |
+| `parallel` | `true` 为组间并行，`false` 为组间串行；组内任务始终串行 |
+| `tasks` | 要评测的任务列表及顺序 |
+| `groups[].name` | 本组日志名称标识（调整风速时也可重命名） |
+| `groups[].wind` | 世界坐标系风速 `[x, y, z]`，单位 m/s |
+| `groups[].policy_gpu` / `groups[].env_gpu` | 本组模型 GPU / 仿真 GPU 编号 |
+
+默认无风组使用 GPU 0/1，有风组使用 GPU 2/3。只运行一组时，从 `groups` 中删除
+另一组即可。JSON 不支持注释和末尾多余的逗号；数字和布尔值不要加引号。
+自定义配置可用 `python scripts/eval_from_config.py --config 路径.json` 加载；
+配置中的相对 `policy_dir` 以仓库根目录为基准，其余模型参数沿用原评测入口的含义。
+
+先查看将执行的命令（Mac 也可运行，不加载模型或 Isaac Sim）：
+
+```bash
+python scripts/eval_from_config.py --dry-run
+```
+
+本次 `num_envs` 通过环境变量 `ROBODOJO_NUM_ENVS` 传给评测客户端，不改动或备份
+共享 YAML。未设置该环境变量的原有命令仍从 YAML 读取场景数。
+日志固定保存在 `logs/eval_<组名>_<北京时间>.log`，开头记录本次参数，正文保留
+原有日志格式；单任务日志和 `eval_result/` 中的结果、视频继续由原入口保存。
+`--dry-run` 只校验 JSON 并展示命令，不验证服务器环境或权重。
+
+任一任务进程失败后，该组停止后续任务，另一组继续；总命令返回非零退出码。
+按 Ctrl+C 或收到 SIGTERM 时会停止当前模型和仿真进程组，等待最多十秒后强制终止
+剩余进程。退出码为零仍需查看各任务 `_result.json` 的 `eval_time` 和 `success_rate`，
+确认实际完成布局数和成功率。此入口沿用模型评测的 reset 流程，每个任务启动一次
+模型和仿真；录制脚本的逐布局独立进程机制不适用于此入口。
 
 ## Keyboard teleoperation for deformable tasks
 
