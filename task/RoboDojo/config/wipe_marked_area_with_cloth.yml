@@ -1,0 +1,57 @@
+Garment:
+  -
+    common:
+      relative_plane: "Table"
+      rotate_rand: false
+      qpos: [1, 0, 0, 0]
+    category:
+      - name: "wiping_cloth"
+        index: [0]
+    select_mode:
+      nums: 1
+      mode: "same"
+      label: ["cloth"]
+    physics:
+      garment_config:
+        particle_mass: 0.00025
+        stretch_stiffness: 10000.0
+        bend_stiffness: 0.2
+        shear_stiffness: 100.0
+        spring_damping: 0.2
+      particle_system:
+        contact_offset: 0.008
+        rest_offset: 0.004
+        particle_contact_offset: 0.008
+        solid_rest_offset: 0.004
+        solver_position_iteration_count: 16
+      particle_material:
+        friction: 0.5
+        particle_friction_scale: 0.5
+        adhesion: 0.0
+        drag: 0.02
+        lift: 0.005
+
+Geometry:
+  -
+    common:
+      relative_plane: "Table"
+      rotate_rand: false
+      qpos: [1, 0, 0, 0]
+    category:
+      - name: "wipe_board"
+        index: [0]
+    select_mode:
+      nums: 1
+      mode: "same"
+      label: ["goal"]
+
+DeformableManipulation:
+  # arx_x5: grasp point lies along local +X from the wrist, by gripper_bias.
+  grasp_axis: [1, 0, 0]
+  kind: "wipe"
+  target_half_extents: [0.20, 0.14]
+  surface_height: 0.006
+  contact_height_tolerance: 0.015
+  minimum_step_motion: 0.001
+  minimum_coverage: 0.90
+  minimum_wipe_distance: 0.15

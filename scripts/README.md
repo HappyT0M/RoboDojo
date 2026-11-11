@@ -20,7 +20,7 @@ conda activate RoboDojo
 python scripts/eval_from_config.py
 ```
 
-默认无风 `[0, 0, 0]` 与有风 `[0, 0.5, 0]` 两组并行，每组依次评测七个任务，
+默认无风 `[0, 0, 0]` 与有风 `[0, 0.5, 0]` 两组并行，每组依次评测十个任务，
 每个任务评测十个布局。选择服务器上空闲的显卡后，修改各组 GPU 编号。
 
 | JSON 字段 | 含义 |
@@ -113,7 +113,7 @@ Every task launches a fresh Isaac Sim process for each layout, sequentially.
 After saving the video, the worker releases camera resources, closes the
 environment and Isaac Sim, and exits. The supervisor waits for process exit
 before starting the next layout, so GPU resources cannot accumulate across
-layouts in one run. Seven tasks with ten layouts each produce 70 workers.
+layouts in one run. Ten tasks with ten layouts each produce 100 workers.
 `--tasks ... --layout_id N` starts one worker per task for layout N.
 The single command and Beijing-time log cover the whole sequence. Failed
 layouts are reported while later layouts still run; the command exits nonzero
@@ -163,23 +163,29 @@ For the rope tasks, generate and verify layouts 0–9 with
 `scripts/generate_rope_eval_layouts.py` before recording. The script prints the
 number of discovered layouts and warns if it is below the task's `eval_nums`.
 
-## Seven deformable evaluation tasks
+## Ten deformable evaluation tasks
 
 The fixed evaluation set contains `put_rope_ball_in_basket`,
 `pass_rope_through_ring`, `route_rope_around_posts`, `fold_clothes_deformable`,
-`flatten_clothes`, `hang_clothes`, and `put_clothes_in_bin`.
+`flatten_clothes`, `hang_clothes`, `put_clothes_in_bin`, `cover_object_with_cloth`,
+`pull_rope_to_retrieve_ball`, and `wipe_marked_area_with_cloth`.
 `drape_cloth_over_rack` has been retired in favor of `hang_clothes`.
 Generate the three rope tasks' ten scene-varied layouts
 with `python scripts/generate_rope_eval_layouts.py`. Generate the light-weight
 fixtures (`folding_board`, `garment_rack`, `garment_bin`, `cloth_block`) and
 ten layouts for each of the four garment tasks with
-`python scripts/generate_deformable_task_assets.py`. Both generators write into
+`python scripts/generate_deformable_task_assets.py`. Generate the three new tasks
+with `python scripts/generate_additional_deformable_assets.py`; add `--check` for
+read-only verification of their five assets and thirty layouts. All generators write into
 `Assets/`; that entire directory is excluded from Git. Export the assets and
 layouts for a separate Hugging Face dataset with `export_deformable_assets.py`.
-See [the asset publishing guide](../docs/DEFORMABLE_ASSETS.md).
+See [the asset publishing guide](../docs/DEFORMABLE_ASSETS.md) and
+[the ten-task expansion and sync commands](../docs/DEFORMABLE_TASK_EXPANSION.md).
+The custom tasks also appear under `robodojo.sh tasks --dimension deformable`;
+this is a fork-specific extension of the official capability groups.
 
 For an existing installation, rebuild the two active rope fixtures with
-`python scripts/create_rope_assets.py --update-fixtures`, then run both layout
+`python scripts/create_rope_assets.py --update-fixtures`, then run the rope and original garment layout
 generators above. This avoids resetting the rope and seed scenes. Custom
 fixtures have an Xform root with a child render/collision Mesh; static triangle
 collisions preserve the bin and target-slot openings. Each frame's height is

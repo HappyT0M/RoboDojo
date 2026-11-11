@@ -30,6 +30,7 @@ class Func_Parser:
         self.joint_ratio_transition_state = [{} for _ in range(self.num_envs)]
         self.rope_task_state = [{} for _ in range(self.num_envs)]
         self.garment_task_state = [{} for _ in range(self.num_envs)]
+        self.deformable_manipulation_state = [{} for _ in range(self.num_envs)]
 
     def reset(self):
         self.pre_state = [{} for _ in range(self.num_envs)]
@@ -37,6 +38,12 @@ class Func_Parser:
         self.joint_ratio_transition_state = [{} for _ in range(self.num_envs)]
         self.rope_task_state = [{} for _ in range(self.num_envs)]
         self.garment_task_state = [{} for _ in range(self.num_envs)]
+        self.deformable_manipulation_state = [{} for _ in range(self.num_envs)]
+
+    def is_deformable_manipulation_success(self, args):
+        from env.reward_manager.deformable_manipulation import evaluate
+
+        return evaluate(self, int(args["env_idx"]))
 
     def is_garment_task_success(self, args):
         """Evaluate simple spatial goals for the new wind-sensitive garment tasks."""

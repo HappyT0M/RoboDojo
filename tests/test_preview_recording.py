@@ -24,6 +24,7 @@ TASKS = [
     "put_rope_ball_in_basket", "pass_rope_through_ring", "route_rope_around_posts",
     "fold_clothes_deformable", "flatten_clothes", "hang_clothes",
     "put_clothes_in_bin",
+    "cover_object_with_cloth", "pull_rope_to_retrieve_ball", "wipe_marked_area_with_cloth",
 ]
 
 
@@ -40,11 +41,11 @@ class PreviewRecordingTests(unittest.TestCase):
             for layout_id in ids:
                 (self.layouts / f"{task}_{layout_id}.json").write_text("{}")
 
-    def test_all_seventy_scenes_get_one_worker_with_original_options(self):
+    def test_all_hundred_scenes_get_one_worker_with_original_options(self):
         self.add_layouts(TASKS, list(reversed(range(10))))
         options = ["--wind", "0", "0.5", "0", "--device_id=0", "--headless", "--duration_s", "8"]
         workers = plan_preview_workers(self.root, ["--tasks", ",".join(TASKS), *options])
-        self.assertEqual(len(workers), 70)
+        self.assertEqual(len(workers), 100)
         self.assertEqual(
             [(_argument_value(w, "--task_name"), _argument_value(w, "--layout_id")) for w in workers],
             [(task, str(i)) for task in TASKS for i in range(10)],
@@ -54,7 +55,7 @@ class PreviewRecordingTests(unittest.TestCase):
     def test_explicit_layout_still_splits_multiple_tasks(self):
         for selector in (["--layout_id", "8"], ["--layout_id=8"]):
             workers = plan_preview_workers(self.root, ["--tasks", ",".join(TASKS), *selector])
-            self.assertEqual(len(workers), 7)
+            self.assertEqual(len(workers), 10)
             self.assertTrue(all(_argument_value(w, "--layout_id") == "8" for w in workers))
 
     def test_exact_names_gaps_and_numeric_order(self):

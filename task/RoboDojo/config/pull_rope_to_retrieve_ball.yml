@@ -1,0 +1,40 @@
+Articulation:
+  -
+    common:
+      relative_plane: "Table"
+      rotate_rand: false
+      qpos: [1, 0, 0, 0]
+    category:
+      - name: "rope_chain"
+        index: [0]
+    select_mode:
+      nums: 1
+      mode: "same"
+      label: ["rope"]
+
+Geometry:
+  -
+    common:
+      relative_plane: "Table"
+      rotate_rand: false
+      qpos: [1, 0, 0, 0]
+    category:
+      - name: "rope_retrieval_zone"
+        index: [0]
+    select_mode:
+      nums: 1
+      mode: "same"
+      label: ["goal"]
+
+DeformableManipulation:
+  # arx_x5: grasp point lies along local +X from the wrist, by gripper_bias.
+  grasp_axis: [1, 0, 0]
+  kind: "pull"
+  link_count: 12
+  free_end_links: 3
+  target_half_extents: [0.09, 0.06]
+  ball_height_range: [0.012, 0.055]
+  minimum_ball_travel: 0.18
+  minimum_pull_distance: 0.12
+  ball_exclusion_radius: 0.06
+  stable_steps: 15

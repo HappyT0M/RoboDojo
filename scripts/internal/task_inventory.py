@@ -22,6 +22,7 @@ from task.RoboDojo import task_registry  # noqa: E402
 # Canonical capability groups from https://robodojo-benchmark.com/doc/sim-tasks/.
 # Generalization tasks also have runnable ``*_random`` configurations; those
 # inherit the dimension of their base task in _task_records().
+# The deformable group below is this fork's extension, not an official dimension.
 DIMENSION_TASKS: dict[str, tuple[str, ...]] = {
     "generalization": (
         "stack_bowls",
@@ -74,6 +75,18 @@ DIMENSION_TASKS: dict[str, tuple[str, ...]] = {
         "pick_from_conveyor_by_image",
         "store_tools_in_toolbox",
         "pour_by_language",
+    ),
+    "deformable": (
+        "put_rope_ball_in_basket",
+        "pass_rope_through_ring",
+        "route_rope_around_posts",
+        "fold_clothes_deformable",
+        "flatten_clothes",
+        "hang_clothes",
+        "put_clothes_in_bin",
+        "cover_object_with_cloth",
+        "pull_rope_to_retrieve_ball",
+        "wipe_marked_area_with_cloth",
     ),
 }
 
@@ -135,7 +148,7 @@ def _module_classes(path: Path) -> set[str]:
 def _task_records() -> list[dict[str, Any]]:
     records = []
     for path in sorted(TASK_DIR.glob("*.py")):
-        if path.name == "__init__.py":
+        if path.name in {"__init__.py", "garment_goal_base.py", "rope_task_base.py"}:
             continue
         name = path.stem
         classes = _module_classes(path)
@@ -266,7 +279,7 @@ def main() -> int:
     parser.add_argument(
         "--list-dimensions",
         action="store_true",
-        help="List the official capability dimensions and their tasks.",
+        help="List the official dimensions and this fork's deformable extension.",
     )
     parser.add_argument(
         "--resolve-dimensions",

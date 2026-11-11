@@ -8,6 +8,17 @@ common:
   eval_nums: 50
 
 tasks:
+  cover_object_with_cloth:
+    eval_nums: 10
+
+  pull_rope_to_retrieve_ball:
+    eval_nums: 10
+    physics_device: "cpu"
+    gpu_dynamics_enabled: false
+
+  wipe_marked_area_with_cloth:
+    eval_nums: 10
+
   put_rope_ball_in_basket:
     eval_nums: 10
     physics_device: "cpu"

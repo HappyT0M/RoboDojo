@@ -1,10 +1,10 @@
-# 七个可形变任务的 Hugging Face 资产管理
+# 十个可形变任务的 Hugging Face 资产管理
 
 GitHub 管理任务 Python/YAML、资产生成/导出脚本和下载说明。整个 `Assets` 目录由
 Hugging Face 管理；本地仍使用 RoboDojo 原有目录结构，任务代码无需改资产根路径。
 
-建议创建 Dataset 类型仓库，例如 `你的用户名/RoboDojo-Deformable`。当前导出范围为
-七个任务的 70 个布局和布局直接引用的 18 个物体实例目录。未使用的 `rope_ring`
+自定义资产使用 Dataset 仓库 `HappyT0M/RoboDojo-Deformable`。当前导出范围为
+十个任务的 100 个布局和布局直接引用的 23 个物体实例目录。未使用的 `rope_ring`
 不会被导出：当前穿环任务使用的是原生 `frame`。
 `drape_cloth_over_rack` 已从任务集移除，保留 `hang_clothes`；新导出不再包含
 `square_towel` 或旧的搭毛巾布局。旧文件可以留作历史备份，不会被当前任务集使用。
@@ -12,8 +12,9 @@ Hugging Face 管理；本地仍使用 RoboDojo 原有目录结构，任务代码
 | 物体分类 | 目录及编号 |
 | --- | --- |
 | Articulation | `rope_chain/00000` |
-| Garment | `Top_Long/{00001,00004,00006,00007,00009,00011}` |
+| Garment | `Top_Long/{00001,00004,00006,00007,00009,00011}`；`cover_cloth/00000`、`wiping_cloth/00000` |
 | Geometry | `basket/{00002,00003,00004,00005}`；`frame/00000` |
+| Geometry | `cover_block/00000`、`wipe_board/00000`、`rope_retrieval_zone/00000` |
 | Geometry | `rope_post/00000`、`rope_slot/00000`、`folding_board/00000`、`garment_rack/00000`、`garment_bin/00000`、`cloth_block/00000` |
 
 这些目录都位于 `Assets/Object/RoboDojo/`。导出完整物体目录，保留模型、元数据、
@@ -23,6 +24,10 @@ Hugging Face 管理；本地仍使用 RoboDojo 原有目录结构，任务代码
 `Simple_Room_nolight/orange/teal`、背景 `brown_photostudio_02_4k.hdr`、桌面材质
 `material_0122` 及地面等通用依赖继续使用官方安装。导出器会记录这些依赖，
 但不递归解析 USD 内部的跨目录引用，所以该子集不能单独替代完整官方安装。
+
+2026-11-11 新增覆盖、拉绳取球和擦拭三个任务，各十个布局。生成脚本为
+`scripts/generate_additional_deformable_assets.py`，`--check` 只校验、不改写。
+具体成功判定、文件清单和本次同步命令见 [十任务扩展说明](DEFORMABLE_TASK_EXPANSION.md)。
 
 ## 本地导出
 
@@ -35,16 +40,16 @@ python scripts/export_deformable_assets.py --output .cache/deformable_assets_v1
 如已知当前官方资产的确切 commit，可增加 `--base-revision 完整COMMIT_SHA`。
 未指定时 manifest 会明确记录为 `null`，不会把未知来源版本写成已锁定版本。
 
-输出目录必须是新目录；发布下一版时使用 `deformable_assets_v2` 等新目录，避免
-旧的无关文件混入。导出结果包括：
+输出目录必须是新目录；可使用日期命名，例如 `deformable_assets_20261111_ten_tasks`，避免
+旧的无关文件混入。这只是本地打包目录名，上传目标仍是同一个 Hugging Face 仓库根目录。导出结果包括：
 
 ```text
 deformable_assets_v1/
 ├── README.md
 ├── manifest.json                 # 任务→资产映射、大小、SHA-256、官方依赖
 └── Assets/
-    ├── Object/RoboDojo/...        # 18 个实例目录
-    └── Eval_Layout/RoboDojo/arx_x5/0/...  # 70 个自定义任务布局
+    ├── Object/RoboDojo/...        # 23 个实例目录
+    └── Eval_Layout/RoboDojo/arx_x5/0/...  # 100 个自定义任务布局
 ```
 
 原生 `fold_clothes` 布局不在包内；自定义折衣任务使用 `fold_clothes_deformable`。
@@ -92,9 +97,8 @@ revision 和代码 commit，使无风/有风实验使用同一版场景。每轮
 
 ## 从 Git 停止跟踪 Assets
 
-`.gitignore` 已忽略整个 `/Assets`。对于此前已进入 Git 索引的文件，本次已经执行
-`git rm -r --cached -- Assets`：本地文件保留，停止跟踪的变更处于暂存区。
-提交、推送这次变更后，GitHub 当前版本将不再包含 Assets；旧提交中的资产仍保留。
+`.gitignore` 已忽略整个 `/Assets`，当前 Git 索引不包含资产。用 `git ls-files Assets`
+检查应没有输出。正常提交代码即可，旧 Git 提交中的历史资产不会因此删除。
 
 参考：[HF CLI](https://huggingface.co/docs/huggingface_hub/guides/cli)、
 [HF 文件下载与版本参数](https://huggingface.co/docs/huggingface_hub/guides/download)。

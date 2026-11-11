@@ -73,7 +73,7 @@ class DeformableLayoutGenerationTests(unittest.TestCase):
 
     def test_retired_task_is_not_generated_or_exported_or_registered(self):
         from scripts.export_deformable_assets import TASKS
-        self.assertEqual(len(TASKS), 7)
+        self.assertEqual(len(TASKS), 10)
         self.assertNotIn("drape_cloth_over_rack", TASKS)
         self.assertNotIn("drape_cloth_over_rack", generator.TASKS)
         self.assertFalse((generator.ROOT / "task/RoboDojo/config/drape_cloth_over_rack.yml").exists())
