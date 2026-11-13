@@ -37,12 +37,22 @@ class SeedManager:
             key=lambda p: int(p.stem.rsplit("_", 1)[-1]),
         )
 
-        matching_files = [str(p) for p in matching_files]
-        self.seed_info = {}
-        for idx, file_path in enumerate(matching_files):
-            self.seed_info[idx] = {"scene_layout": file_path}
-
-        all_layout_ids = list(range(len(matching_files)))
+        self.seed_info = {
+            int(path.stem.rsplit("_", 1)[-1]): {"scene_layout": str(path)}
+            for path in matching_files
+        }
+        all_layout_ids = sorted(self.seed_info)
+        requested_layout_ids = self.config.get("layout_ids")
+        if requested_layout_ids is not None:
+            requested_layout_ids = [int(layout_id) for layout_id in requested_layout_ids]
+            missing = sorted(set(requested_layout_ids) - set(all_layout_ids))
+            if missing:
+                raise ValueError(
+                    f"Requested layout IDs {missing} not found for task {self.task_name} "
+                    f"under {layout_dir}; available={all_layout_ids}"
+                )
+            all_layout_ids = requested_layout_ids
+            print(f"[SeedManager] selected layouts={all_layout_ids}")
         excluded = set(int(s) for s in (completed_layout_ids or [])) | set(int(s) for s in (abandoned_layout_ids or []))
         if excluded:
             self.seed_list: List[int] = [s for s in all_layout_ids if s not in excluded]

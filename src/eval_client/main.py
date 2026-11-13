@@ -278,6 +278,17 @@ def main():
     eval_cfg["additional_info"] = args_cli.additional_info
     eval_cfg["seed"] = args_cli.seed
     eval_cfg["physx_monitor_enabled"] = enable_monitor
+    requested_layout_ids = os.environ.get("ROBODOJO_LAYOUT_IDS", "").strip()
+    if requested_layout_ids:
+        try:
+            layout_ids = [int(value.strip()) for value in requested_layout_ids.split(",")]
+        except ValueError as exc:
+            raise ValueError("ROBODOJO_LAYOUT_IDS must be comma-separated non-negative integers") from exc
+        if (not layout_ids or any(layout_id < 0 for layout_id in layout_ids)
+                or len(set(layout_ids)) != len(layout_ids)):
+            raise ValueError("ROBODOJO_LAYOUT_IDS must contain unique non-negative integers")
+        eval_cfg["layout_ids"] = layout_ids
+        print(f"[main] selected layout IDs={layout_ids}")
 
     deploy_cfg = {}
     deploy_cfg["policy_name"] = args_cli.policy_name

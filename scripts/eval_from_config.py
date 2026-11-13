@@ -30,8 +30,9 @@ NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_-]*\Z")
 def load_config(path: Path) -> dict:
     config = json.loads(path.read_text(encoding="utf-8"))
     required = set(COMMON_FLAGS) | {"num_envs", "parallel", "tasks", "groups"}
-    if not isinstance(config, dict) or set(config) != required:
-        raise ValueError(f"顶层字段必须为：{', '.join(sorted(required))}")
+    allowed = required | {"task_layout_ids"}
+    if not isinstance(config, dict) or not required.issubset(config) or set(config) - allowed:
+        raise ValueError(f"必需字段为：{', '.join(sorted(required))}；可选字段：task_layout_ids")
     for key in COMMON_FLAGS[:6]:
         if not isinstance(config[key], str) or not config[key].strip():
             raise ValueError(f"{key} 必须为非空字符串")
@@ -53,6 +54,17 @@ def load_config(path: Path) -> dict:
         raise ValueError("tasks 必须为不重复的任务名称列表，且不能为空")
     if not NAME.fullmatch(config["env_cfg"]):
         raise ValueError("env_cfg 必须为配置文件名（不含路径及 .yml 后缀）")
+    task_layout_ids = config.get("task_layout_ids", {})
+    if not isinstance(task_layout_ids, dict):
+        raise ValueError("task_layout_ids 必须是 task_name 到布局编号列表的映射")
+    unknown_layout_tasks = set(task_layout_ids) - set(tasks)
+    if unknown_layout_tasks:
+        raise ValueError(f"task_layout_ids 中的任务不在 tasks 列表：{sorted(unknown_layout_tasks)}")
+    for task, layout_ids in task_layout_ids.items():
+        if (not isinstance(layout_ids, list) or not layout_ids
+                or any(type(layout_id) is not int or layout_id < 0 for layout_id in layout_ids)
+                or len(set(layout_ids)) != len(layout_ids)):
+            raise ValueError(f"task_layout_ids.{task} 必须是非空、不重复的非负整数列表")
     groups = config["groups"]
     if not isinstance(groups, list) or not groups:
         raise ValueError("groups 必须为非空列表")
@@ -164,11 +176,19 @@ def run_groups(config: dict, root: Path) -> int:
                     continue
                 task = config["tasks"][state["index"]]
                 command = build_command(config, state["group"], task, root)
+                task_env = env.copy()
+                task_env.pop("ROBODOJO_LAYOUT_IDS", None)
+                layout_ids = config.get("task_layout_ids", {}).get(task)
+                if layout_ids is not None:
+                    task_env["ROBODOJO_LAYOUT_IDS"] = ",".join(map(str, layout_ids))
                 state["log"].write(f"[eval] command={shlex.join(command)}\n")
+                if layout_ids is not None:
+                    state["log"].write(f"[eval] selected_layout_ids={layout_ids}\n")
                 state["log"].flush()
-                print(f"[eval] {state['group']['name']} 开始任务：{task}", flush=True)
+                suffix = f"，布局={layout_ids}" if layout_ids is not None else "，全部布局"
+                print(f"[eval] {state['group']['name']} 开始任务：{task}{suffix}", flush=True)
                 state["process"] = subprocess.Popen(
-                    command, cwd=root, env=env, stdout=state["log"],
+                    command, cwd=root, env=task_env, stdout=state["log"],
                     stderr=subprocess.STDOUT, start_new_session=True,
                 )
                 if not config["parallel"]:
@@ -202,8 +222,12 @@ def main() -> int:
         if args.dry_run:
             for group in config["groups"]:
                 for task in config["tasks"]:
+                    layout_ids = config.get("task_layout_ids", {}).get(task)
+                    layout_suffix = f" layout_ids={layout_ids}" if layout_ids is not None else " all_layouts"
                     print(f"[dry-run] {group['name']}: EVAL_ENV_TYPE=sim "
                           f"ROBODOJO_NUM_ENVS={config['num_envs']} "
+                          f"ROBODOJO_LAYOUT_IDS={','.join(map(str, layout_ids)) if layout_ids is not None else '<unset>'}"
+                          f"{layout_suffix} "
                           + shlex.join(build_command(config, group, task, ROOT)))
             return 0
         policy_dir = ROOT / config["policy_dir"]
