@@ -278,7 +278,7 @@ def discover_wind_bodies(scene_manager: Any) -> tuple[list[RigidBodySpec], list[
     Robot assets are held by ``robot_manager``, not these scene registries.
     Static Geometry and the room/table registries are intentionally omitted.
     """
-    from pxr import Usd, UsdGeom, UsdPhysics
+    from pxr import Sdf, Usd, UsdGeom, UsdPhysics
 
     stage = scene_manager.stage
     bbox_cache = UsdGeom.BBoxCache(Usd.TimeCode.Default(), [UsdGeom.Tokens.default_, UsdGeom.Tokens.render])
@@ -295,15 +295,28 @@ def discover_wind_bodies(scene_manager: Any) -> tuple[list[RigidBodySpec], list[
             for object_key, obj in objects.items():
                 physics_cfg = getattr(obj, "physics_config", getattr(obj, "physics_cfg", {})) or {}
                 root_path = getattr(obj, "usd_prim_path", getattr(obj, "_prim_path", None))
-                is_robot = bool(getattr(obj, "is_robot", False)) or (root_path and "/robot" in root_path.lower())
+                root_path_str = str(root_path) if root_path is not None else ""
+                is_robot = bool(getattr(obj, "is_robot", False)) or "/robot" in root_path_str.lower()
                 fixed_base = bool(physics_cfg.get("fixed_base", False)) if object_kind == "articulation" else False
                 if not is_wind_body_candidate(object_kind, fixed_base=fixed_base, is_robot=is_robot):
                     skipped.append({"label": str(object_key), "reason": "robot_or_fixed_base"})
                     continue
-                if not root_path:
+                if not root_path_str:
                     skipped.append({"label": str(object_key), "reason": "missing_prim_path"})
                     continue
-                root_prim = stage.GetPrimAtPath(root_path)
+                # USD Python bindings require an Sdf.Path here. Scene-managed
+                # objects expose this path as a plain string in some task
+                # registries and as an Sdf.Path in others, depending on how
+                # the object was spawned.
+                try:
+                    root_path_sdf = Sdf.Path(root_path_str)
+                except Exception:
+                    skipped.append({"label": str(object_key), "reason": "invalid_prim_path"})
+                    continue
+                if root_path_sdf.IsEmpty() or not root_path_sdf.IsAbsolutePath():
+                    skipped.append({"label": str(object_key), "reason": "invalid_prim_path"})
+                    continue
+                root_prim = stage.GetPrimAtPath(root_path_sdf)
                 if not root_prim or not root_prim.IsValid():
                     skipped.append({"label": str(object_key), "reason": "invalid_prim_path"})
                     continue

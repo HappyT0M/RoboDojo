@@ -137,6 +137,12 @@ def _apply_focused_layout_tweak(layout: dict, task: str, index: int) -> dict:
         if index in {2, 9}:
             _shift_xy(rope, 0.0, -0.02)
             _shift_xy(frame, 0.0, 0.02)
+        if index == 2:
+            # This layout still hit an invalid PhysX rope transform. Increase
+            # the initial rope/frame separation without changing the frame
+            # pose or the other previously stable focused layouts.
+            _shift_xy(rope, 0.0, -0.03)
+            _shift_xy(frame, 0.0, 0.02)
         frame["default_ori"] = [0.653281482, 0.653281482, 0.27059805, 0.27059805]
         lowest = assets.transformed_min_z(
             "Geometry", "frame", frame["category_idx"], frame["default_ori"], frame["scale"]

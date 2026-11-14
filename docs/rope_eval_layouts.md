@@ -5,7 +5,7 @@
 | 任务 / 布局 | 调整 |
 | --- | --- |
 | `put_rope_ball_in_basket` / 2 | 在上一轮调整基础上，绳索沿 X 正方向移动 2 cm、篮筐沿 X 正方向移动 1.5 cm；移除额外的 rope_post |
-| `pass_rope_through_ring` / 2、9 | 在上一轮调整基础上，绳索沿 Y 负方向移动 2 cm、框沿 Y 正方向移动 2 cm；框保持基准直立朝向并保留桌面间隙；移除额外的 rope_post |
+| `pass_rope_through_ring` / 2、9 | 两者都保持基准直立框朝向、桌面间隙，并移除额外的 rope_post。布局 2 在上一轮基础上，绳索再沿 Y 负方向移动 3 cm、框再沿 Y 正方向移动 2 cm；布局 9 保留上一轮位置 |
 | `route_rope_around_posts` / 5、7 | 在上一轮调整基础上，绳索起点沿 Y 负方向再移动 3 cm；posts 和目标槽保持原位 |
 
 这些调整保留任务目标和障碍布局，目的是减少初始摆放过近或绳索触碰导致的异常；是否能解决 PhysX 异常仍需在 Isaac Sim 中重跑验证。
