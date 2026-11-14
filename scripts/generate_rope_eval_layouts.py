@@ -120,15 +120,23 @@ def _apply_focused_layout_tweak(layout: dict, task: str, index: int) -> dict:
     geometry = layout["Geometry"]
     rope = layout["Articulation"]["rope_chain"][0]
     if task == "put_rope_ball_in_basket":
-        # Reduce the initial Y distance between the ball and basket by 4 cm;
-        # retain a clear starting gap and remove the incidental post.
+        # Layout 2 previously produced an invalid rope transform during rollout.
+        # Move the rope and basket slightly toward the table center while
+        # keeping their clear near/far separation along Y.
         _shift_xy(rope, 0.0, 0.02)
         _shift_xy(geometry["basket"][0], 0.0, -0.02)
+        if index == 2:
+            _shift_xy(rope, 0.02, 0.0)
+            _shift_xy(geometry["basket"][0], 0.015, 0.0)
         geometry.pop("rope_post", None)
     elif task == "pass_rope_through_ring":
         # Use the nominal upright frame pose for the focused retest and retain
-        # the computed table clearance. Remove the incidental post obstacle.
+        # the computed table clearance. Move rope and frame apart along Y to
+        # reduce incidental initial contact. Remove the post obstacle.
         frame = geometry["frame"][0]
+        if index in {2, 9}:
+            _shift_xy(rope, 0.0, -0.02)
+            _shift_xy(frame, 0.0, 0.02)
         frame["default_ori"] = [0.653281482, 0.653281482, 0.27059805, 0.27059805]
         lowest = assets.transformed_min_z(
             "Geometry", "frame", frame["category_idx"], frame["default_ori"], frame["scale"]
@@ -136,9 +144,11 @@ def _apply_focused_layout_tweak(layout: dict, task: str, index: int) -> dict:
         frame["default_pos"][2] = round(assets.table_top(layout) - lowest + 0.01, 6)
         geometry.pop("rope_post", None)
     elif task == "route_rope_around_posts":
-        # Bring the rope start 3 cm in X and 2 cm in Y toward the obstacle
-        # course while leaving the posts and target slot fixed.
+        # Keep the rope on the near side with an extra 3 cm of clearance from
+        # the posts after layouts 5 and 7 produced invalid transforms.
         _shift_xy(rope, 0.03, 0.02)
+        if index in {5, 7}:
+            _shift_xy(rope, 0.0, -0.03)
     return layout
 
 

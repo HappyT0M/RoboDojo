@@ -1,6 +1,14 @@
 # 绳索任务先导评测布局
 
-三个任务在 `Assets/Eval_Layout/RoboDojo/arx_x5/0/` 下各有编号 0–9 的十个布局。编号 0 保留现有场景；其余布局对场景整体及绳索起点施加固定的桌面 XY 偏移。目标朝向、绳链关节初态、任务参数、相机和桌面不变。
+三个任务在 `Assets/Eval_Layout/RoboDojo/arx_x5/0/` 下各有编号 0–9 的十个布局。编号 0 保留基准摆放；其他布局包含固定的场景和绳索起点变化。`generate_rope_eval_layouts.py` 对指定复测布局额外做小幅间距调整：
+
+| 任务 / 布局 | 调整 |
+| --- | --- |
+| `put_rope_ball_in_basket` / 2 | 在上一轮调整基础上，绳索沿 X 正方向移动 2 cm、篮筐沿 X 正方向移动 1.5 cm；移除额外的 rope_post |
+| `pass_rope_through_ring` / 2、9 | 在上一轮调整基础上，绳索沿 Y 负方向移动 2 cm、框沿 Y 正方向移动 2 cm；框保持基准直立朝向并保留桌面间隙；移除额外的 rope_post |
+| `route_rope_around_posts` / 5、7 | 在上一轮调整基础上，绳索起点沿 Y 负方向再移动 3 cm；posts 和目标槽保持原位 |
+
+这些调整保留任务目标和障碍布局，目的是减少初始摆放过近或绳索触碰导致的异常；是否能解决 PhysX 异常仍需在 Isaac Sim 中重跑验证。
 
 仓库的 `.gitignore` 忽略 `Assets/`。在评测机上准备好原始资产和三个 `_0.json` 后，运行：
 
